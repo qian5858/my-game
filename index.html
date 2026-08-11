@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎮 网页小游戏合集</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);min-height:100vh;font-family:'Segoe UI',sans-serif;color:#e0e0e0;padding:30px 20px}
+h1{text-align:center;font-size:2.2rem;margin-bottom:8px;background:linear-gradient(90deg,#ff6b6b,#feca57,#48dbfb,#ff9ff3);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:3px}
+.subtitle{text-align:center;color:#889;font-size:.95rem;margin-bottom:30px}
+.category{margin-bottom:28px;max-width:900px;margin-left:auto;margin-right:auto}
+.category h2{font-size:1.1rem;color:#48dbfb;margin-bottom:12px;padding-left:4px;display:flex;align-items:center;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:18px 20px;text-decoration:none;color:#e0e0e0;transition:all .25s;display:flex;flex-direction:column;gap:6px;position:relative;overflow:hidden}
+.card:hover{border-color:rgba(72,219,251,.4);background:rgba(72,219,251,.06);transform:translateY(-3px);box-shadow:0 8px 25px rgba(0,0,0,.3)}
+.card .icon{font-size:1.8rem}
+.card .name{font-weight:bold;font-size:1rem;color:#fff}
+.card .desc{font-size:.78rem;color:#889;line-height:1.4}
+.card .tag{position:absolute;top:10px;right:10px;font-size:.6rem;padding:2px 8px;border-radius:10px;background:rgba(72,219,251,.15);color:#48dbfb;border:1px solid rgba(72,219,251,.2)}
+.card .tag.hot{background:rgba(255,107,107,.15);color:#ff6b6b;border-color:rgba(255,107,107,.2)}
+.card .tag.new{background:rgba(46,204,113,.15);color:#2ecc71;border-color:rgba(46,204,113,.2)}
+.footer{text-align:center;margin-top:40px;color:#556;font-size:.75rem}
+.footer a{color:#48dbfb;text-decoration:none}
+</style>
+</head>
+<body>
+
+<h1>🎮 网页小游戏合集</h1>
+<p class="subtitle">23 款纯前端小游戏 · 零依赖 · 即开即玩 · 支持手机和电脑</p>
+
+<div class="category">
+  <h2>🧩 休闲益智</h2>
+  <div class="grid">
+    <a class="card" href="minesweeper.html">
+      <span class="tag">经典</span>
+      <span class="icon">💣</span>
+      <span class="name">扫雷</span>
+      <span class="desc">经典扫雷 + 3D 骰子，掷骰显示剩余地雷数</span>
+    </a>
+    <a class="card" href="match3.html">
+      <span class="tag hot">热门</span>
+      <span class="icon">💎</span>
+      <span class="name">消消乐</span>
+      <span class="desc">10 级难度递进，3D 立体可爱宝石，Web Audio 音效</span>
+    </a>
+    <a class="card" href="watermelon.html">
+      <span class="tag hot">热门</span>
+      <span class="icon">🍉</span>
+      <span class="name">合成大西瓜</span>
+      <span class="desc">真实物理引擎，10 种水果进化，3D 球体渲染</span>
+    </a>
+    <a class="card" href="jumpjump.html">
+      <span class="tag">经典</span>
+      <span class="icon">🦘</span>
+      <span class="name">跳一跳</span>
+      <span class="desc">按住蓄力松手跳跃，等距 3D 视角，完美落地 combo</span>
+    </a>
+    <a class="card" href="game2048.html">
+      <span class="tag new">创新</span>
+      <span class="icon">🔢</span>
+      <span class="name">2048+</span>
+      <span class="desc">道具系统：撤销/重排/炸弹，连击特效，彩虹动画</span>
+    </a>
+    <a class="card" href="sudoku.html">
+      <span class="tag">经典</span>
+      <span class="icon">🔟</span>
+      <span class="name">数独</span>
+      <span class="desc">4 个难度级别，笔记模式，自动清除关联笔记</span>
+    </a>
+    <a class="card" href="stackmatch.html">
+      <span class="tag new">创新</span>
+      <span class="icon">📦</span>
+      <span class="name">堆叠消消乐</span>
+      <span class="desc">3D 方块堆叠，三消 + 重力下落，道具辅助</span>
+    </a>
+  </div>
+</div>
+
+<div class="category">
+  <h2>🔥 反应挑战</h2>
+  <div class="grid">
+    <a class="card" href="flappybird.html">
+      <span class="tag hot">热门</span>
+      <span class="icon">🐦</span>
+      <span class="name">Flappy Bird</span>
+      <span class="desc">3 种难度，长按持续飞行，金色羽毛粒子特效</span>
+    </a>
+    <a class="card" href="breakout.html">
+      <span class="tag">经典</span>
+      <span class="icon">🧱</span>
+      <span class="name">打砖块</span>
+      <span class="desc">无限关卡、多血砖块、连击系统、粒子特效</span>
+    </a>
+    <a class="card" href="runner.html">
+      <span class="tag new">创新</span>
+      <span class="icon">🏃</span>
+      <span class="name">极速跑酷</span>
+      <span class="desc">二段跳 + 滑铲，视差城市夜景，速度渐进加快</span>
+    </a>
+    <a class="card" href="fruitslice.html">
+      <span class="tag hot">热门</span>
+      <span class="icon">🔪</span>
+      <span class="name">切水果</span>
+      <span class="desc">8 种水果 + 炸弹，果汁飞溅粒子，连击 Combo</span>
+    </a>
+  </div>
+</div>
+
+<div class="category">
+  <h2>👾 生存闯关</h2>
+  <div class="grid">
+    <a class="card" href="mario.html">
+      <span class="tag">经典</span>
+      <span class="icon">🍄</span>
+      <span class="name">超级玛丽</span>
+      <span class="desc">5 关横版闯关，像素风角色，视差滚动背景</span>
+    </a>
+    <a class="card" href="dungeon.html">
+      <span class="tag new">创新</span>
+      <span class="icon">🗡️</span>
+      <span class="name">像素地牢</span>
+      <span class="desc">Roguelike 探索，随机地图，战争迷雾 FOV，6 种敌人</span>
+    </a>
+    <a class="card" href="plane.html">
+      <span class="tag hot">热门</span>
+      <span class="icon">✈️</span>
+      <span class="name">飞机大战</span>
+      <span class="desc">波次系统 + Boss 战，4 种道具，弹幕 + 粒子爆炸</span>
+    </a>
+    <a class="card" href="survivor.html">
+      <span class="tag new">创新</span>
+      <span class="icon">🧛</span>
+      <span class="name">吸血鬼幸存者</span>
+      <span class="desc">自动攻击 Roguelike，12 种技能选择，割草快感</span>
+    </a>
+  </div>
+</div>
+
+<div class="category">
+  <h2>🎯 竞技对战</h2>
+  <div class="grid">
+    <a class="card" href="ioarena.html">
+      <span class="tag hot">热门</span>
+      <span class="icon">🔵</span>
+      <span class="name">IO 大作战</span>
+      <span class="desc">agar.io 风格，15 个 AI 对手，大吃小，排行榜</span>
+    </a>
+    <a class="card" href="gomoku.html">
+      <span class="tag">经典</span>
+      <span class="icon">⚫</span>
+      <span class="name">五子棋</span>
+      <span class="desc">3 级 AI 对战，木纹棋盘 + 3D 棋子，支持悔棋</span>
+    </a>
+  </div>
+</div>
+
+<div class="category">
+  <h2>🎉 社交 / 🧠 烧脑 / 🎣 治愈 / 🏰 策略 / 🎵 节奏</h2>
+  <div class="grid">
+    <a class="card" href="spy.html">
+      <span class="tag">聚会</span>
+      <span class="icon">🕵️</span>
+      <span class="name">谁是卧底</span>
+      <span class="desc">4-12 人线下聚会，50+ 近义词对，投票淘汰</span>
+    </a>
+    <a class="card" href="brain.html">
+      <span class="tag">烧脑</span>
+      <span class="icon">🧠</span>
+      <span class="name">脑洞大师</span>
+      <span class="desc">15 关烧脑解谜，多种题型，挑战你的脑洞</span>
+    </a>
+    <a class="card" href="fishing.html">
+      <span class="tag">治愈</span>
+      <span class="icon">🎣</span>
+      <span class="name">钓鱼大师</span>
+      <span class="desc">休闲钓鱼 + 收集图鉴，11 种海洋生物</span>
+    </a>
+    <a class="card" href="towerdefense.html">
+      <span class="tag new">创新</span>
+      <span class="icon">🏰</span>
+      <span class="name">塔防战争</span>
+      <span class="desc">4 种防御塔，20 波 + Boss，链式闪电特效</span>
+    </a>
+    <a class="card" href="tetris.html">
+      <span class="tag">经典</span>
+      <span class="icon">🟦</span>
+      <span class="name">俄罗斯方块</span>
+      <span class="desc">幽灵预览块、保持功能、Wall Kick 旋转系统</span>
+    </a>
+    <a class="card" href="snake.html">
+      <span class="tag new">创新</span>
+      <span class="icon">🐍</span>
+      <span class="name">贪吃蛇大作战</span>
+      <span class="desc">4 种模式 + 4 款皮肤，道具系统（护盾/磁铁/炸弹）</span>
+    </a>
+  </div>
+</div>
+
+<div class="footer">
+  <p>所有游戏均为纯前端单文件，无需安装，双击即玩</p>
+  <p style="margin-top:6px"><a href="https://github.com/qian5858/my-game">⭐ GitHub 仓库</a> · 欢迎 Star & Fork</p>
+</div>
+
+</body>
+</html>
