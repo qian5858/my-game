@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>打砖块</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #0a0a1a, #1a0a2e, #0a1a2e);
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; color: #e0e0e0; user-select: none;
+    overflow: hidden;
+  }
+  h1 {
+    font-size: 2rem; margin-bottom: 8px; letter-spacing: 6px;
+    background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(0 0 10px rgba(255,255,255,.15));
+  }
+
+  .info-bar {
+    display: flex; gap: 18px; margin-bottom: 10px; font-size: 1.05rem;
+    flex-wrap: wrap; justify-content: center;
+  }
+  .info-bar .item {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.06); padding: 5px 14px; border-radius: 20px;
+  }
+  .info-bar .val { font-weight: bold; color: #feca57; min-width: 24px; text-align: center; }
+
+  .canvas-wrap {
+    position: relative; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 0 50px rgba(100,100,255,.15), inset 0 0 60px rgba(0,0,0,.4);
+    border: 2px solid rgba(100,100,255,.15);
+  }
+  canvas { display: block; }
+
+  /* 弹窗 */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; backdrop-filter: blur(4px);
+  }
+  .overlay.hidden { display: none; }
+  .modal {
+    background: linear-gradient(135deg, #1a1a3e, #2d2b55); padding: 36px 52px;
+    border-radius: 20px; text-align: center;
+    box-shadow: 0 0 50px rgba(100,100,255,.2);
+  }
+  .modal h2 { font-size: 1.8rem; margin-bottom: 8px; color: #feca57; }
+  .modal p { margin-bottom: 18px; color: #aaa; font-size: 1.05rem; }
+  .modal button {
+    padding: 10px 36px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #feca57, #ff6b6b);
+    color: #1a1a3e; font-size: 1rem; font-weight: bold;
+    cursor: pointer; transition: transform .2s; margin: 0 6px;
+  }
+  .modal button:hover { transform: scale(1.06); }
+
+  .music-btn {
+    position: fixed; top: 16px; right: 16px; z-index: 200;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.15);
+    color: #e0e0e0; font-size: 1.3rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .music-btn:hover { background: rgba(255,255,255,.15); }
+  .music-btn.muted { opacity: .4; }
+
+  .tip { margin-top: 10px; font-size: .8rem; color: #556; }
+</style>
+</head>
+<body>
+
+<button class="music-btn" id="music-btn" onclick="toggleMusic()" title="音乐开关">🔊</button>
+<h1>🧱 打 砖 块 🧱</h1>
+
+<div class="info-bar">
+  <div class="item">⭐ 关卡 <span class="val" id="level-num">1</span></div>
+  <div class="item">🏆 分数 <span class="val" id="score">0</span></div>
+  <div class="item">❤️ 生命 <span class="val" id="lives">3</span></div>
+  <div class="item">🔥 连击 <span class="val" id="combo">0</span></div>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="game" width="640" height="480"></canvas>
+</div>
+<p class="tip">← → 或鼠标移动控制挡板 · 空格发射/暂停</p>
+
+<div class="overlay hidden" id="overlay">
+  <div class="modal">
+    <h2 id="result-title"></h2>
+    <p id="result-msg"></p>
+    <div id="modal-buttons"></div>
+  </div>
+</div>
+
+<script>
+/* ========== 音效系统 ========== */
+let audioCtx, musicOn = true, bgmTimer = null;
+function initAudio() { if (audioCtx) return; audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function playNote(freq, dur, type, vol, delay) {
+  if (!audioCtx || !musicOn) return;
+  const t = audioCtx.currentTime + (delay || 0);
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(vol || 0.1, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(t); o.stop(t + dur);
+}
+function sfxHitBrick(c) { initAudio(); playNote(600 + c * 60, 0.12, 'sine', 0.10); playNote(800 + c * 60, 0.08, 'sine', 0.06, 0.04); }
+function sfxPaddle() { initAudio(); playNote(440, 0.08, 'triangle', 0.08); }
+function sfxWall() { initAudio(); playNote(300, 0.06, 'square', 0.04); }
+function sfxLose() { initAudio(); playNote(350, 0.2, 'sawtooth', 0.06); playNote(250, 0.3, 'sawtooth', 0.05, 0.15); playNote(150, 0.4, 'sawtooth', 0.04, 0.3); }
+function sfxLevelUp() { initAudio(); [523,659,784,1047].forEach((f,i) => playNote(f, 0.25, 'sine', 0.12, i*0.12)); }
+function startBGM() {
+  stopBGM(); if (!audioCtx) initAudio();
+  const m = [392,0,440,0,523,0,440,0, 392,0,523,0,440,0,392,0, 349,0,392,0,440,0,523,0, 440,0,523,0,440,0,392,0];
+  let i = 0;
+  bgmTimer = setInterval(() => { if (!musicOn) return; const f = m[i % m.length]; if (f > 0) playNote(f, 0.18, 'sine', 0.03); i++; }, 220);
+}
+function stopBGM() { if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; } }
+function toggleMusic() {
+  musicOn = !musicOn;
+  const b = document.getElementById('music-btn');
+  b.textContent = musicOn ? '🔊' : '🔇'; b.classList.toggle('muted', !musicOn);
+  musicOn ? (initAudio(), startBGM()) : stopBGM();
+}
+
+/* ========== 游戏 ========== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width, H = canvas.height;
+
+const BRICK_ROWS = 6, BRICK_COLS = 10, BRICK_W = 56, BRICK_H = 20, BRICK_PAD = 4;
+const BRICK_OFFSET_X = (W - BRICK_COLS * (BRICK_W + BRICK_PAD) + BRICK_PAD) / 2;
+const BRICK_OFFSET_Y = 50;
+const PADDLE_W = 90, PADDLE_H = 14, PADDLE_Y = H - 36;
+const BALL_R = 7;
+
+const BRICK_COLORS = [
+  ['#ff6b6b','#ee5a24'],['#feca57','#f39c12'],['#48dbfb','#0abde3'],
+  ['#ff9ff3','#f368e0'],['#54a0ff','#2e86de'],['#5f27cd','#341f97'],
+];
+
+let paddle, ball, bricks, score, lives, combo, level, gameState;
+// gameState: 'waiting' | 'playing' | 'paused' | 'win' | 'lose'
+
+const scoreEl = document.getElementById('score');
+const livesEl = document.getElementById('lives');
+const levelEl = document.getElementById('level-num');
+const comboEl = document.getElementById('combo');
+const overlayEl = document.getElementById('overlay');
+
+/* 关卡配置 */
+function getLevelCfg(lv) {
+  return {
+    rows: Math.min(4 + lv, 8),
+    speed: 4 + lv * 0.5,
+    paddleW: Math.max(90 - lv * 5, 50),
+  };
+}
+
+function initLevel(lv) {
+  level = lv;
+  const cfg = getLevelCfg(lv);
+  score = 0; lives = 3; combo = 0;
+  paddle = { x: W / 2 - cfg.paddleW / 2, w: cfg.paddleW };
+  resetBall(cfg.speed);
+  bricks = [];
+  for (let r = 0; r < cfg.rows; r++) {
+    for (let c = 0; c < BRICK_COLS; c++) {
+      const hp = r < 2 && lv >= 3 ? 2 : 1; // 高等级前两行需要打两次
+      bricks.push({
+        x: BRICK_OFFSET_X + c * (BRICK_W + BRICK_PAD),
+        y: BRICK_OFFSET_Y + r * (BRICK_H + BRICK_PAD),
+        w: BRICK_W, h: BRICK_H,
+        color: BRICK_COLORS[r % BRICK_COLORS.length],
+        hp, maxHp: hp, alive: true,
+      });
+    }
+  }
+  scoreEl.textContent = score;
+  livesEl.textContent = lives;
+  levelEl.textContent = lv;
+  comboEl.textContent = combo;
+  overlayEl.classList.add('hidden');
+  gameState = 'waiting';
+}
+
+function resetBall(speed) {
+  ball = {
+    x: W / 2, y: PADDLE_Y - BALL_R - 2,
+    dx: (Math.random() > 0.5 ? 1 : -1) * (speed * 0.6),
+    dy: -speed,
+    r: BALL_R, speed,
+    trail: [],
+  };
+}
+
+/* 输入 */
+let keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (e.key === ' ' || e.key === 'Space') {
+    e.preventDefault();
+    if (gameState === 'waiting') { gameState = 'playing'; }
+    else if (gameState === 'playing') { gameState = 'paused'; }
+    else if (gameState === 'paused') { gameState = 'playing'; }
+  }
+});
+document.addEventListener('keyup', e => { keys[e.key] = false; });
+canvas.addEventListener('mousemove', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * (W / rect.width);
+  paddle.x = Math.max(0, Math.min(W - paddle.w, mx - paddle.w / 2));
+});
+canvas.addEventListener('click', () => {
+  if (gameState === 'waiting') gameState = 'playing';
+});
+
+/* 更新 */
+function update() {
+  if (gameState !== 'playing') return;
+
+  // 挡板键盘控制
+  const pSpeed = 7;
+  if (keys['ArrowLeft'] || keys['a']) paddle.x = Math.max(0, paddle.x - pSpeed);
+  if (keys['ArrowRight'] || keys['d']) paddle.x = Math.min(W - paddle.w, paddle.x + pSpeed);
+
+  // 球轨迹记录
+  ball.trail.push({ x: ball.x, y: ball.y });
+  if (ball.trail.length > 12) ball.trail.shift();
+
+  // 移动球
+  ball.x += ball.dx;
+  ball.y += ball.dy;
+
+  // 墙壁碰撞
+  if (ball.x - ball.r <= 0) { ball.x = ball.r; ball.dx = Math.abs(ball.dx); sfxWall(); }
+  if (ball.x + ball.r >= W) { ball.x = W - ball.r; ball.dx = -Math.abs(ball.dx); sfxWall(); }
+  if (ball.y - ball.r <= 0) { ball.y = ball.r; ball.dy = Math.abs(ball.dy); sfxWall(); }
+
+  // 掉落
+  if (ball.y + ball.r > H) {
+    lives--;
+    livesEl.textContent = lives;
+    combo = 0; comboEl.textContent = combo;
+    sfxLose();
+    if (lives <= 0) { gameState = 'lose'; showResult(false); return; }
+    resetBall(ball.speed);
+    gameState = 'waiting';
+    return;
+  }
+
+  // 挡板碰撞
+  if (ball.dy > 0 &&
+      ball.y + ball.r >= PADDLE_Y && ball.y + ball.r <= PADDLE_Y + PADDLE_H + 4 &&
+      ball.x >= paddle.x && ball.x <= paddle.x + paddle.w) {
+    const hit = (ball.x - paddle.x) / paddle.w; // 0~1
+    const angle = (hit - 0.5) * Math.PI * 0.7; // -63° ~ 63°
+    const spd = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+    ball.dx = spd * Math.sin(angle);
+    ball.dy = -spd * Math.cos(angle);
+    ball.y = PADDLE_Y - ball.r;
+    sfxPaddle();
+  }
+
+  // 砖块碰撞
+  for (const b of bricks) {
+    if (!b.alive) continue;
+    if (ball.x + ball.r > b.x && ball.x - ball.r < b.x + b.w &&
+        ball.y + ball.r > b.y && ball.y - ball.r < b.y + b.h) {
+      // 判断碰撞方向
+      const overlapL = (ball.x + ball.r) - b.x;
+      const overlapR = (b.x + b.w) - (ball.x - ball.r);
+      const overlapT = (ball.y + ball.r) - b.y;
+      const overlapB = (b.y + b.h) - (ball.y - ball.r);
+      const minO = Math.min(overlapL, overlapR, overlapT, overlapB);
+      if (minO === overlapL || minO === overlapR) ball.dx = -ball.dx;
+      else ball.dy = -ball.dy;
+
+      b.hp--;
+      if (b.hp <= 0) {
+        b.alive = false;
+        combo++;
+        const pts = 10 * combo;
+        score += pts;
+        spawnParticles(b.x + b.w/2, b.y + b.h/2, b.color[0]);
+      }
+      scoreEl.textContent = score;
+      comboEl.textContent = combo;
+      sfxHitBrick(combo);
+      break; // 一帧只碰一个
+    }
+  }
+
+  // 检查胜利
+  if (bricks.every(b => !b.alive)) {
+    gameState = 'win';
+    sfxLevelUp();
+    showResult(true);
+  }
+}
+
+/* 粒子系统 */
+let particles = [];
+function spawnParticles(x, y, color) {
+  for (let i = 0; i < 10; i++) {
+    particles.push({
+      x, y,
+      dx: (Math.random() - 0.5) * 6,
+      dy: (Math.random() - 0.5) * 6,
+      life: 1, color,
+      size: Math.random() * 4 + 2,
+    });
+  }
+}
+function updateParticles() {
+  for (const p of particles) {
+    p.x += p.dx; p.y += p.dy;
+    p.dy += 0.15; p.life -= 0.03;
+  }
+  particles = particles.filter(p => p.life > 0);
+}
+
+/* 渲染 */
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 背景网格
+  ctx.strokeStyle = 'rgba(100,100,255,.04)';
+  for (let i = 0; i < W; i += 40) { ctx.beginPath(); ctx.moveTo(i,0); ctx.lineTo(i,H); ctx.stroke(); }
+  for (let i = 0; i < H; i += 40) { ctx.beginPath(); ctx.moveTo(0,i); ctx.lineTo(W,i); ctx.stroke(); }
+
+  // 砖块
+  for (const b of bricks) {
+    if (!b.alive) continue;
+    const alpha = b.hp < b.maxHp ? 0.55 : 1;
+    const grad = ctx.createLinearGradient(b.x, b.y, b.x, b.y + b.h);
+    grad.addColorStop(0, b.color[0]);
+    grad.addColorStop(1, b.color[1]);
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = grad;
+    roundRect(ctx, b.x, b.y, b.w, b.h, 5);
+    ctx.fill();
+    // 高光
+    ctx.fillStyle = 'rgba(255,255,255,.2)';
+    roundRect(ctx, b.x + 2, b.y + 2, b.w - 4, b.h / 2 - 2, 3);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // 粒子
+  for (const p of particles) {
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // 球轨迹
+  for (let i = 0; i < ball.trail.length; i++) {
+    const t = ball.trail[i];
+    const a = i / ball.trail.length * 0.3;
+    ctx.globalAlpha = a;
+    ctx.fillStyle = '#48dbfb';
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, ball.r * (i / ball.trail.length), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // 球
+  const ballGrad = ctx.createRadialGradient(ball.x - 2, ball.y - 2, 1, ball.x, ball.y, ball.r);
+  ballGrad.addColorStop(0, '#fff');
+  ballGrad.addColorStop(0.4, '#48dbfb');
+  ballGrad.addColorStop(1, '#0abde3');
+  ctx.fillStyle = ballGrad;
+  ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2); ctx.fill();
+  // 球发光
+  ctx.shadowColor = '#48dbfb'; ctx.shadowBlur = 15;
+  ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // 挡板
+  const pGrad = ctx.createLinearGradient(paddle.x, PADDLE_Y, paddle.x, PADDLE_Y + PADDLE_H);
+  pGrad.addColorStop(0, '#feca57');
+  pGrad.addColorStop(1, '#ff6b6b');
+  ctx.fillStyle = pGrad;
+  roundRect(ctx, paddle.x, PADDLE_Y, paddle.w, PADDLE_H, 7);
+  ctx.fill();
+  // 挡板发光
+  ctx.shadowColor = '#feca57'; ctx.shadowBlur = 12;
+  ctx.fillStyle = pGrad;
+  roundRect(ctx, paddle.x, PADDLE_Y, paddle.w, PADDLE_H, 7);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // 等待提示
+  if (gameState === 'waiting') {
+    ctx.fillStyle = 'rgba(255,255,255,.6)';
+    ctx.font = '18px "Segoe UI"';
+    ctx.textAlign = 'center';
+    ctx.fillText('按 空格 或 点击 发射', W / 2, H / 2 + 40);
+  }
+  if (gameState === 'paused') {
+    ctx.fillStyle = 'rgba(0,0,0,.4)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#feca57';
+    ctx.font = 'bold 32px "Segoe UI"';
+    ctx.textAlign = 'center';
+    ctx.fillText('⏸ 暂停', W / 2, H / 2);
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+/* 结算 */
+function showResult(win) {
+  setTimeout(() => {
+    document.getElementById('result-title').textContent = win ? '⭐ 关卡通过！' : '💫 游戏结束';
+    document.getElementById('result-msg').textContent = win
+      ? `第 ${level} 关完成！得分：${score}`
+      : `最终得分：${score}，到达第 ${level} 关`;
+    const btns = document.getElementById('modal-buttons');
+    if (win) {
+      btns.innerHTML = `<button onclick="nextLevel()">下一关 ▶</button>`;
+    } else {
+      btns.innerHTML = `<button onclick="restartLevel()">重新挑战</button>
+        <button onclick="initLevel(1)" style="margin-left:8px;background:linear-gradient(135deg,#48dbfb,#54a0ff)">回到第1关</button>`;
+    }
+    overlayEl.classList.remove('hidden');
+  }, 500);
+}
+function nextLevel() { initLevel(level + 1); }
+function restartLevel() { initLevel(level); }
+
+/* 主循环 */
+function loop() {
+  update();
+  updateParticles();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+initLevel(1);
+loop();
+
+document.addEventListener('click', function _b() {
+  initAudio(); if (musicOn) startBGM();
+  document.removeEventListener('click', _b);
+});
+</script>
+</body>
+</html>

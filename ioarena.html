@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IO大作战</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a1a;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden}
+.header{display:flex;gap:12px;margin-bottom:6px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+.header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
+.header .val{font-weight:bold;color:#feca57;min-width:28px;text-align:center}
+canvas{display:block;border-radius:10px;border:2px solid #2a2a4a;cursor:none}
+.tip{margin-top:4px;font-size:.7rem;color:#445;text-align:center}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.7);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:10px}
+.overlay h2{font-size:1.6rem;margin-bottom:8px;color:#feca57}
+.overlay p{color:#aab;margin-bottom:12px}
+.overlay .btn{padding:10px 28px;border:none;border-radius:10px;font-size:1rem;font-weight:bold;cursor:pointer;background:linear-gradient(135deg,#48dbfb,#0abde3);color:#0a1628}
+.canvas-wrap{position:relative}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="item">⚖️ 质量 <span class="val" id="mass">10</span></div>
+  <div class="item">🏆 排名 <span class="val" id="rank">1</span></div>
+  <div class="item">🏅 最高 <span class="val" id="best">0</span></div>
+  <div class="item">👑 击杀 <span class="val" id="kills">0</span></div>
+</div>
+<div class="canvas-wrap">
+  <canvas id="cv" width="600" height="500"></canvas>
+  <div class="overlay" id="overlay">
+    <h2 id="ov-title">IO大作战</h2>
+    <p id="ov-msg">吃掉小球变大，避开比你大的！</p>
+    <button class="btn" onclick="startGame()">开始游戏</button>
+  </div>
+</div>
+<div class="tip">鼠标控制方向 · 空格加速(消耗质量) · 吃球成长，大吃小</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=600,H=500;
+const WORLD_W=2000,WORLD_H=2000;
+const NAMES=['小明','大白','球王','吞噬者','小可爱','巨无霸','风暴','闪电','泡泡','圆圆','胖胖','飞飞','强强','萌萌','豆豆'];
+
+let player,bots,foods,particles,camera,kills,bestMass,gameRunning,gameOver;
+let mouseX=W/2,mouseY=H/2;
+bestMass=parseInt(localStorage.getItem('io_best')||'0');
+document.getElementById('best').textContent=bestMass;
+
+function startGame(){
+  player={x:WORLD_W/2,y:WORLD_H/2,r:20,mass:10,vx:0,vy:0,color:randomColor(),name:'你',alive:true};
+  bots=[];foods=[];particles=[];kills=0;gameRunning=true;gameOver=false;
+  camera={x:0,y:0};
+  // Spawn bots
+  for(let i=0;i<15;i++)spawnBot();
+  // Spawn food
+  for(let i=0;i<200;i++)spawnFood();
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('kills').textContent=0;
+}
+
+function randomColor(){
+  const colors=['#e74c3c','#3498db','#2ecc71','#f1c40f','#9b59b6','#e67e22','#00d2d3','#ff6b6b','#48dbfb','#ff9ff3','#feca57','#27ae60'];
+  return colors[Math.floor(Math.random()*colors.length)];
+}
+
+function spawnBot(){
+  const mass=5+Math.random()*50;
+  bots.push({
+    x:Math.random()*WORLD_W,y:Math.random()*WORLD_H,
+    r:Math.sqrt(mass)*4,mass,
+    vx:0,vy:0,color:randomColor(),
+    name:NAMES[Math.floor(Math.random()*NAMES.length)],
+    alive:true,
+    targetX:Math.random()*WORLD_W,targetY:Math.random()*WORLD_H,
+    retargetTimer:0,
+  });
+}
+
+function spawnFood(){
+  foods.push({
+    x:Math.random()*WORLD_W,y:Math.random()*WORLD_H,
+    r:4+Math.random()*3,mass:1+Math.random()*2,
+    color:randomColor(),
+  });
+}
+
+function massToRadius(mass){return Math.sqrt(mass)*4;}
+
+cv.addEventListener('mousemove',e=>{
+  const rect=cv.getBoundingClientRect();
+  mouseX=e.clientX-rect.left;mouseY=e.clientY-rect.top;
+});
+
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'&&gameRunning&&player.alive){
+    // Boost
+    const dx=mouseX-W/2,dy=mouseY-H/2;
+    const len=Math.hypot(dx,dy);
+    if(len>0&&player.mass>15){
+      player.vx+=dx/len*8;player.vy+=dy/len*8;
+      player.mass-=2;player.r=massToRadius(player.mass);
+      // Eject particle
+      particles.push({x:player.x,y:player.y,vx:-dx/len*3,vy:-dy/len*3,r:5,life:30,color:player.color});
+    }
+  }
+});
+
+function updatePlayer(){
+  if(!player.alive)return;
+  const dx=mouseX-W/2,dy=mouseY-H/2;
+  const len=Math.hypot(dx,dy);
+  const speed=Math.max(1,5-player.mass/50);
+  if(len>5){
+    player.vx+=(dx/len*speed-player.vx)*0.1;
+    player.vy+=(dy/len*speed-player.vy)*0.1;
+  }else{
+    player.vx*=0.9;player.vy*=0.9;
+  }
+  player.x+=player.vx;player.y+=player.vy;
+  player.x=Math.max(player.r,Math.min(WORLD_W-player.r,player.x));
+  player.y=Math.max(player.r,Math.min(WORLD_H-player.r,player.y));
+  player.r=massToRadius(player.mass);
+
+  // Eat food
+  for(let i=foods.length-1;i>=0;i--){
+    const f=foods[i];
+    if(Math.hypot(player.x-f.x,player.y-f.y)<player.r){
+      player.mass+=f.mass;player.r=massToRadius(player.mass);
+      foods.splice(i,1);spawnFood();
+    }
+  }
+
+  // Eat bots or be eaten
+  for(let i=bots.length-1;i>=0;i--){
+    const b=bots[i];
+    if(!b.alive)continue;
+    const dist=Math.hypot(player.x-b.x,player.y-b.y);
+    if(player.r>b.r*1.1&&dist<player.r){
+      player.mass+=b.mass*0.8;player.r=massToRadius(player.mass);
+      b.alive=false;kills++;
+      document.getElementById('kills').textContent=kills;
+      for(let j=0;j<8;j++){
+        const angle=Math.random()*Math.PI*2;
+        particles.push({x:b.x,y:b.y,vx:Math.cos(angle)*3,vy:Math.sin(angle)*3,r:3+Math.random()*3,life:25,color:b.color});
+      }
+      setTimeout(()=>{bots.splice(i,1);spawnBot();},3000);
+    }else if(b.r>player.r*1.1&&dist<b.r){
+      player.alive=false;gameOver=true;
+      showGameOver(b);
+    }
+  }
+
+  // Camera
+  camera.x=player.x-W/2;camera.y=player.y-H/2;
+}
+
+function updateBots(){
+  bots.forEach(b=>{
+    if(!b.alive)return;
+    b.retargetTimer--;
+    if(b.retargetTimer<=0){
+      b.retargetTimer=60+Math.random()*120;
+      // Find nearest food or flee from bigger
+      let nearestFood=null,minDist=Infinity;
+      for(const f of foods){
+        const d=Math.hypot(b.x-f.x,b.y-f.y);
+        if(d<minDist){minDist=d;nearestFood=f;}
+      }
+      // Check if player is nearby and bigger
+      const pDist=Math.hypot(b.x-player.x,b.y-player.y);
+      if(player.alive&&player.r>b.r*1.1&&pDist<200){
+        // Flee from player
+        b.targetX=b.x+(b.x-player.x)*2;
+        b.targetY=b.y+(b.y-player.y)*2;
+      }else if(nearestFood){
+        b.targetX=nearestFood.x;b.targetY=nearestFood.y;
+      }else{
+        b.targetX=Math.random()*WORLD_W;b.targetY=Math.random()*WORLD_H;
+      }
+    }
+
+    const dx=b.targetX-b.x,dy=b.targetY-b.y;
+    const len=Math.hypot(dx,dy);
+    const speed=Math.max(0.5,3-b.mass/80);
+    if(len>5){
+      b.vx+=(dx/len*speed-b.vx)*0.05;
+      b.vy+=(dy/len*speed-b.vy)*0.05;
+    }
+    b.x+=b.vx;b.y+=b.vy;
+    b.x=Math.max(b.r,Math.min(WORLD_W-b.r,b.x));
+    b.y=Math.max(b.r,Math.min(WORLD_H-b.r,b.y));
+    b.r=massToRadius(b.mass);
+
+    // Eat food
+    for(let i=foods.length-1;i>=0;i--){
+      const f=foods[i];
+      if(Math.hypot(b.x-f.x,b.y-f.y)<b.r){
+        b.mass+=f.mass;b.r=massToRadius(b.mass);
+        foods.splice(i,1);spawnFood();
+      }
+    }
+
+    // Eat smaller bots
+    for(const b2 of bots){
+      if(b2===b||!b2.alive)continue;
+      if(b.r>b2.r*1.1&&Math.hypot(b.x-b2.x,b.y-b2.y)<b.r){
+        b.mass+=b2.mass*0.8;b.r=massToRadius(b.mass);
+        b2.alive=false;
+        setTimeout(()=>{const idx=bots.indexOf(b2);if(idx>=0)bots.splice(idx,1);spawnBot();},3000);
+      }
+    }
+  });
+}
+
+function showGameOver(killer){
+  if(player.mass>bestMass){bestMass=Math.floor(player.mass);localStorage.setItem('io_best',bestMass);document.getElementById('best').textContent=bestMass;}
+  document.getElementById('ov-title').textContent='被吞噬了！';
+  document.getElementById('ov-msg').textContent=`被 ${killer.name} 吃掉 · 质量: ${Math.floor(player.mass)} · 击杀: ${kills}`;
+  document.getElementById('overlay').style.display='flex';
+}
+
+function drawGrid(){
+  ctx.strokeStyle='rgba(255,255,255,.03)';ctx.lineWidth=1;
+  const gridSize=50;
+  const startX=-(camera.x%gridSize);
+  const startY=-(camera.y%gridSize);
+  for(let x=startX;x<W;x+=gridSize){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=startY;y<H;y+=gridSize){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+}
+
+function drawCircle(x,y,r,color,name,mass){
+  const sx=x-camera.x,sy=y-camera.y;
+  if(sx<-r||sx>W+r||sy<-r||sy>H+r)return;
+  // Body
+  ctx.fillStyle=color;
+  ctx.shadowColor=color;ctx.shadowBlur=r*0.3;
+  ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.fill();
+  ctx.shadowBlur=0;
+  // Highlight
+  ctx.fillStyle='rgba(255,255,255,.2)';
+  ctx.beginPath();ctx.arc(sx-r*0.2,sy-r*0.2,r*0.4,0,Math.PI*2);ctx.fill();
+  // Border
+  ctx.strokeStyle='rgba(0,0,0,.2)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.arc(sx,sy,r,0,Math.PI*2);ctx.stroke();
+  // Name
+  if(r>15){
+    ctx.font=`bold ${Math.min(14,r*0.5)}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle='#fff';ctx.fillText(name,sx,sy-2);
+    ctx.font=`${Math.min(11,r*0.35)}px sans-serif`;
+    ctx.fillText(Math.floor(mass),sx,sy+10);
+  }
+}
+
+function draw(){
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+  drawGrid();
+
+  // World border
+  ctx.strokeStyle='rgba(255,107,107,.3)';ctx.lineWidth=3;
+  ctx.strokeRect(-camera.x,-camera.y,WORLD_W,WORLD_H);
+
+  // Food
+  foods.forEach(f=>{
+    const sx=f.x-camera.x,sy=f.y-camera.y;
+    if(sx<-10||sx>W+10||sy<-10||sy>H+10)return;
+    ctx.fillStyle=f.color;
+    ctx.beginPath();ctx.arc(sx,sy,f.r,0,Math.PI*2);ctx.fill();
+  });
+
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx;p.y+=p.vy;p.life--;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    const sx=p.x-camera.x,sy=p.y-camera.y;
+    ctx.globalAlpha=p.life/25;ctx.fillStyle=p.color;
+    ctx.beginPath();ctx.arc(sx,sy,p.r,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  // Bots
+  bots.forEach(b=>{if(b.alive)drawCircle(b.x,b.y,b.r,b.color,b.name,b.mass);});
+
+  // Player
+  if(player.alive)drawCircle(player.x,player.y,player.r,player.color,player.name,player.mass);
+
+  // Cursor
+  const cx=mouseX,cy=mouseY;
+  ctx.strokeStyle='rgba(255,255,255,.3)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(cx-8,cy);ctx.lineTo(cx+8,cy);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(cx,cy-8);ctx.lineTo(cx,cy+8);ctx.stroke();
+
+  // Leaderboard
+  const all=[player,...bots.filter(b=>b.alive)].sort((a,b)=>b.mass-a.mass);
+  const rank=all.indexOf(player)+1;
+  document.getElementById('mass').textContent=Math.floor(player.mass);
+  document.getElementById('rank').textContent=rank;
+
+  // Mini leaderboard
+  ctx.font='bold 11px sans-serif';ctx.textAlign='left';
+  ctx.fillStyle='rgba(255,255,255,.5)';
+  ctx.fillText('排行榜:',W-110,16);
+  all.slice(0,5).forEach((e,i)=>{
+    ctx.fillStyle=e===player?'#48dbfb':'rgba(255,255,255,.4)';
+    ctx.fillText(`${i+1}. ${e.name} (${Math.floor(e.mass)})`,W-110,32+i*16);
+  });
+}
+
+function gameLoop(){
+  if(gameRunning&&!gameOver){
+    updatePlayer();updateBots();
+  }
+  draw();
+  requestAnimationFrame(gameLoop);
+}
+
+gameRunning=false;gameOver=true;
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

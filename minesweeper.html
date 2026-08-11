@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>扫雷</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    color: #e0e0e0;
+    user-select: none;
+  }
+  h1 { font-size: 2rem; margin-bottom: 12px; letter-spacing: 4px; color: #00d4ff; text-shadow: 0 0 20px rgba(0,212,255,.4); }
+
+  /* 难度选择 */
+  .difficulty { display: flex; gap: 10px; margin-bottom: 16px; }
+  .difficulty button {
+    padding: 8px 20px; border: 2px solid #00d4ff; border-radius: 8px;
+    background: transparent; color: #00d4ff; font-size: .95rem; cursor: pointer;
+    transition: all .2s;
+  }
+  .difficulty button:hover, .difficulty button.active {
+    background: #00d4ff; color: #1a1a2e; font-weight: bold;
+  }
+
+  /* 信息栏 */
+  .info-bar {
+    display: flex; align-items: center; gap: 24px;
+    margin-bottom: 12px; font-size: 1.2rem;
+  }
+  .info-bar span { display: flex; align-items: center; gap: 6px; }
+  .info-bar .icon { font-size: 1.4rem; }
+
+  /* 棋盘 */
+  .board {
+    display: inline-grid; gap: 2px; padding: 8px;
+    background: #0a1628; border-radius: 12px;
+    box-shadow: 0 0 30px rgba(0,212,255,.15);
+  }
+  .cell {
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1rem; font-weight: bold; border-radius: 4px;
+    cursor: pointer; transition: all .1s;
+  }
+  .cell.hidden {
+    background: linear-gradient(145deg, #1e3a5f, #162d4a);
+    border: 1px solid #2a4a6b;
+  }
+  .cell.hidden:hover { background: linear-gradient(145deg, #264a73, #1c3656); }
+  .cell.revealed {
+    background: #0d1b2a; border: 1px solid #152238; cursor: default;
+  }
+  .cell.flagged { background: linear-gradient(145deg, #3a1e5f, #2d164a); border: 1px solid #5a2a8b; }
+  .cell.mine-exploded { background: #ff4444 !important; border-color: #ff6666 !important; }
+  .cell.mine-shown { background: #1a0a0a; border: 1px solid #3a1a1a; }
+
+  /* 数字颜色 */
+  .cell.n1 { color: #4fc3f7; } .cell.n2 { color: #81c784; }
+  .cell.n3 { color: #e57373; } .cell.n4 { color: #7986cb; }
+  .cell.n5 { color: #ff8a65; } .cell.n6 { color: #4dd0e1; }
+  .cell.n7 { color: #ba68c8; } .cell.n8 { color: #90a4ae; }
+
+  /* 弹窗 */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 10; backdrop-filter: blur(4px);
+  }
+  .overlay.hidden { display: none; }
+  .modal {
+    background: #16213e; padding: 36px 48px; border-radius: 16px;
+    text-align: center; box-shadow: 0 0 40px rgba(0,212,255,.2);
+  }
+  .modal h2 { font-size: 1.8rem; margin-bottom: 8px; }
+  .modal p { margin-bottom: 20px; color: #aaa; }
+  .modal button {
+    padding: 10px 32px; border: 2px solid #00d4ff; border-radius: 8px;
+    background: #00d4ff; color: #1a1a2e; font-size: 1rem; font-weight: bold;
+    cursor: pointer; transition: all .2s;
+  }
+  .modal button:hover { background: transparent; color: #00d4ff; }
+
+  .win h2 { color: #4caf50; }
+  .lose h2 { color: #f44336; }
+
+  /* 3D 骰子 */
+  .dice-section { margin-top: 18px; text-align: center; }
+  .dice-section p { font-size: .9rem; color: #7aa; margin-bottom: 10px; }
+  .dice-scene {
+    width: 80px; height: 80px; perspective: 400px;
+    margin: 0 auto; cursor: pointer;
+  }
+  .dice-cube {
+    width: 80px; height: 80px; position: relative;
+    transform-style: preserve-3d;
+    transition: transform 1.2s cubic-bezier(.2,.8,.3,1);
+    transform: rotateX(-20deg) rotateY(20deg);
+  }
+  .dice-cube.rolling {
+    transition: transform 1.2s cubic-bezier(.2,.8,.3,1);
+  }
+  .dice-face {
+    position: absolute; width: 80px; height: 80px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.6rem; font-weight: bold; border-radius: 12px;
+    border: 2px solid rgba(0,212,255,.3);
+    backface-visibility: visible;
+  }
+  .dice-face.f1 { background: linear-gradient(135deg,#0d2137,#162d4a); color:#00d4ff; transform: rotateY(  0deg) translateZ(40px); }
+  .dice-face.f2 { background: linear-gradient(135deg,#1a0d2e,#2d164a); color:#ba68c8; transform: rotateY(180deg) translateZ(40px); }
+  .dice-face.f3 { background: linear-gradient(135deg,#0d2e1a,#164a2d); color:#81c784; transform: rotateY( 90deg) translateZ(40px); }
+  .dice-face.f4 { background: linear-gradient(135deg,#2e1a0d,#4a2d16); color:#ff8a65; transform: rotateY(-90deg) translateZ(40px); }
+  .dice-face.f5 { background: linear-gradient(135deg,#2e0d1a,#4a162d); color:#e57373; transform: rotateX( 90deg) translateZ(40px); }
+  .dice-face.f6 { background: linear-gradient(135deg,#0d1a2e,#162d4a); color:#4dd0e1; transform: rotateX(-90deg) translateZ(40px); }
+  .dice-result {
+    margin-top: 10px; font-size: 1rem; color: #00d4ff;
+    min-height: 1.4em; transition: opacity .3s;
+  }
+</style>
+</head>
+<body>
+
+<h1>💣 扫 雷</h1>
+
+<div class="difficulty">
+  <button data-level="easy" class="active">初级 9×9</button>
+  <button data-level="medium">中级 16×16</button>
+  <button data-level="hard">高级 30×16</button>
+</div>
+
+<div class="info-bar">
+  <span><i class="icon">💣</i> <span id="mine-count">10</span></span>
+  <span><i class="icon">🚩</i> <span id="flag-count">0</span></span>
+  <span><i class="icon">⏱</i> <span id="timer">0</span>s</span>
+</div>
+
+<div class="board" id="board"></div>
+
+<div class="dice-section">
+  <p>🎲 点击骰子，揭晓地雷数量</p>
+  <div class="dice-scene" id="dice-scene" onclick="rollDice()">
+    <div class="dice-cube" id="dice-cube">
+      <div class="dice-face f1" id="df1">?</div>
+      <div class="dice-face f2" id="df2">?</div>
+      <div class="dice-face f3" id="df3">?</div>
+      <div class="dice-face f4" id="df4">?</div>
+      <div class="dice-face f5" id="df5">?</div>
+      <div class="dice-face f6" id="df6">?</div>
+    </div>
+  </div>
+  <div class="dice-result" id="dice-result"></div>
+</div>
+
+<div class="overlay hidden" id="overlay">
+  <div class="modal" id="modal">
+    <h2 id="result-title"></h2>
+    <p id="result-msg"></p>
+    <button onclick="restartGame()">再来一局</button>
+  </div>
+</div>
+
+<script>
+const LEVELS = {
+  easy:   { rows: 9,  cols: 9,  mines: 10 },
+  medium: { rows: 16, cols: 16, mines: 40 },
+  hard:   { rows: 16, cols: 30, mines: 99 },
+};
+
+let level = 'easy';
+let rows, cols, totalMines;
+let board, revealed, flagged, mineMap;
+let gameOver, firstClick, flagCount, revealedCount;
+let timerInterval, seconds;
+
+const boardEl   = document.getElementById('board');
+const mineEl    = document.getElementById('mine-count');
+const flagEl    = document.getElementById('flag-count');
+const timerEl   = document.getElementById('timer');
+const overlayEl = document.getElementById('overlay');
+const modalEl   = document.getElementById('modal');
+const titleEl   = document.getElementById('result-title');
+const msgEl     = document.getElementById('result-msg');
+
+// 难度按钮
+document.querySelectorAll('.difficulty button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelector('.difficulty .active').classList.remove('active');
+    btn.classList.add('active');
+    level = btn.dataset.level;
+    initGame();
+  });
+});
+
+function initGame() {
+  const cfg = LEVELS[level];
+  rows = cfg.rows; cols = cfg.cols; totalMines = cfg.mines;
+  board = Array.from({ length: rows }, () => Array(cols).fill(0));
+  revealed = Array.from({ length: rows }, () => Array(cols).fill(false));
+  flagged  = Array.from({ length: rows }, () => Array(cols).fill(false));
+  mineMap  = Array.from({ length: rows }, () => Array(cols).fill(false));
+  gameOver = false; firstClick = true; flagCount = 0; revealedCount = 0;
+  seconds = 0;
+  clearInterval(timerInterval);
+  timerEl.textContent = '0';
+  mineEl.textContent = totalMines;
+  flagEl.textContent = '0';
+  overlayEl.classList.add('hidden');
+  renderBoard();
+}
+
+function placeMines(safeR, safeC) {
+  let placed = 0;
+  while (placed < totalMines) {
+    const r = Math.floor(Math.random() * rows);
+    const c = Math.floor(Math.random() * cols);
+    if (mineMap[r][c] || (Math.abs(r - safeR) <= 1 && Math.abs(c - safeC) <= 1)) continue;
+    mineMap[r][c] = true; placed++;
+  }
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (!mineMap[r][c]) board[r][c] = countAdj(r, c);
+}
+
+function countAdj(r, c) {
+  let n = 0;
+  for (const [dr, dc] of dirs()) {
+    const nr = r + dr, nc = c + dc;
+    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && mineMap[nr][nc]) n++;
+  }
+  return n;
+}
+
+const dirs = () => [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+
+function renderBoard() {
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, 36px)`;
+  boardEl.innerHTML = '';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell hidden';
+      cell.dataset.r = r; cell.dataset.c = c;
+      cell.addEventListener('click', () => handleClick(r, c));
+      cell.addEventListener('contextmenu', e => { e.preventDefault(); handleFlag(r, c); });
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function getCell(r, c) {
+  return boardEl.children[r * cols + c];
+}
+
+function handleClick(r, c) {
+  if (gameOver || flagged[r][c] || revealed[r][c]) return;
+  if (firstClick) {
+    firstClick = false;
+    placeMines(r, c);
+    timerInterval = setInterval(() => { seconds++; timerEl.textContent = seconds; }, 1000);
+  }
+  if (mineMap[r][c]) { lose(r, c); return; }
+  reveal(r, c);
+  checkWin();
+}
+
+function reveal(r, c) {
+  if (r < 0 || r >= rows || c < 0 || c >= cols) return;
+  if (revealed[r][c] || flagged[r][c] || mineMap[r][c]) return;
+  revealed[r][c] = true; revealedCount++;
+  const cell = getCell(r, c);
+  cell.classList.remove('hidden');
+  cell.classList.add('revealed');
+  if (board[r][c] > 0) {
+    cell.textContent = board[r][c];
+    cell.classList.add('n' + board[r][c]);
+  } else {
+    for (const [dr, dc] of dirs()) reveal(r + dr, c + dc);
+  }
+}
+
+function handleFlag(r, c) {
+  if (gameOver || revealed[r][c]) return;
+  flagged[r][c] = !flagged[r][c];
+  const cell = getCell(r, c);
+  if (flagged[r][c]) {
+    flagCount++; cell.classList.add('flagged'); cell.textContent = '🚩';
+  } else {
+    flagCount--; cell.classList.remove('flagged'); cell.textContent = '';
+  }
+  flagEl.textContent = flagCount;
+}
+
+function lose(r, c) {
+  gameOver = true; clearInterval(timerInterval);
+  getCell(r, c).classList.add('mine-exploded');
+  getCell(r, c).textContent = '💥';
+  for (let i = 0; i < rows; i++)
+    for (let j = 0; j < cols; j++)
+      if (mineMap[i][j] && !(i === r && j === c)) {
+        const cell = getCell(i, j);
+        cell.classList.remove('hidden'); cell.classList.add('mine-shown');
+        cell.textContent = '💣';
+      }
+  setTimeout(() => showResult(false), 500);
+}
+
+function checkWin() {
+  if (revealedCount === rows * cols - totalMines) {
+    gameOver = true; clearInterval(timerInterval);
+    setTimeout(() => showResult(true), 300);
+  }
+}
+
+function showResult(win) {
+  modalEl.className = 'modal ' + (win ? 'win' : 'lose');
+  titleEl.textContent = win ? '🎉 恭喜通关！' : '💥 游戏结束';
+  msgEl.textContent = win ? `用时 ${seconds} 秒，你赢了！` : '踩到地雷了，再试试吧！';
+  overlayEl.classList.remove('hidden');
+}
+
+function restartGame() { initGame(); }
+
+/* ---- 3D 骰子 ---- */
+const diceRotations = [
+  { rx:   0, ry:   0 },  // face 1 front
+  { rx:   0, ry: 180 },  // face 2 back
+  { rx:   0, ry: -90 },  // face 3 right
+  { rx:   0, ry:  90 },  // face 4 left
+  { rx: -90, ry:   0 },  // face 5 top
+  { rx:  90, ry:   0 },  // face 6 bottom
+];
+let diceRolling = false;
+
+function rollDice() {
+  if (diceRolling || gameOver) return;
+  diceRolling = true;
+  const cube = document.getElementById('dice-cube');
+  const resultEl = document.getElementById('dice-result');
+  resultEl.style.opacity = '0';
+
+  // 随机选择展示面 (1-6)
+  const face = Math.floor(Math.random() * 6);
+  const spins = 2; // 旋转圈数
+  const target = diceRotations[face];
+  const rx = target.rx + 360 * spins;
+  const ry = target.ry + 360 * spins;
+
+  cube.style.transition = 'transform 1.2s cubic-bezier(.2,.8,.3,1)';
+  cube.style.transform = `rotateX(${rx}deg) rotateY(${ry}deg)`;
+
+  // 在各面显示地雷信息
+  const labels = [
+    `💣 ${totalMines} 颗地雷`,
+    `🎯 共 ${totalMines} 雷`,
+    `⚠️ 小心！${totalMines} 雷`,
+    `💥 ${totalMines} 个雷区`,
+    `🔥 地雷数: ${totalMines}`,
+    `☢️ 总计 ${totalMines} 雷`,
+  ];
+  for (let i = 0; i < 6; i++) {
+    document.getElementById('df' + (i + 1)).textContent = labels[i];
+  }
+
+  setTimeout(() => {
+    resultEl.textContent = `🎲 本局共有 ${totalMines} 颗地雷！`;
+    resultEl.style.opacity = '1';
+    diceRolling = false;
+  }, 1300);
+}
+
+initGame();
+</script>
+</body>
+</html>

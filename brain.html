@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>脑洞大师</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden;padding:10px}
+.header{display:flex;gap:12px;margin-bottom:8px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+.header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
+.header .val{font-weight:bold;color:#feca57;min-width:24px;text-align:center}
+.puzzle-area{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:16px;padding:24px;width:100%;max-width:420px;min-height:380px;display:flex;flex-direction:column;align-items:center;backdrop-filter:blur(6px)}
+.question{font-size:1.1rem;color:#48dbfb;margin-bottom:16px;text-align:center;line-height:1.5}
+.hint{font-size:.8rem;color:#667;margin-bottom:12px;text-align:center;font-style:italic}
+.puzzle-content{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;width:100%}
+.answer-btns{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.ans-btn{padding:12px 24px;border:1px solid rgba(255,255,255,.2);border-radius:10px;background:rgba(255,255,255,.06);color:#e0e0e0;font-size:1rem;cursor:pointer;transition:all .2s;font-family:inherit;min-width:80px}
+.ans-btn:hover{border-color:#48dbfb;background:rgba(72,219,251,.1)}
+.ans-btn.correct{border-color:#2ecc71;background:rgba(46,204,113,.2);color:#2ecc71;animation:popCorrect .4s ease}
+.ans-btn.wrong{border-color:#e74c3c;background:rgba(231,76,60,.2);color:#e74c3c;animation:shake .4s ease}
+@keyframes popCorrect{0%{transform:scale(1)}50%{transform:scale(1.15)}100%{transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
+.input-ans{padding:10px 16px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#e0e0e0;font-size:1.1rem;text-align:center;outline:none;width:200px}
+.input-ans:focus{border-color:#48dbfb}
+.drag-item{padding:10px 18px;border:1px solid rgba(255,255,255,.2);border-radius:8px;background:rgba(255,255,255,.06);cursor:grab;font-size:1.1rem;transition:transform .2s}
+.drag-item:active{cursor:grabbing;transform:scale(1.1)}
+.drop-zone{min-height:50px;border:2px dashed rgba(255,255,255,.15);border-radius:10px;display:flex;align-items:center;justify-content:center;gap:8px;padding:8px;width:100%;max-width:300px}
+.drop-zone .drag-item{cursor:default}
+.feedback{font-size:1.2rem;margin-top:12px;min-height:30px;text-align:center}
+.nav-btns{display:flex;gap:10px;margin-top:12px}
+.nav-btn{padding:8px 20px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.05);color:#aab;cursor:pointer;font-size:.85rem;transition:all .2s;font-family:inherit}
+.nav-btn:hover{background:rgba(255,255,255,.12)}
+.nav-btn.primary{background:linear-gradient(135deg,#48dbfb,#0abde3);color:#0a1628;border:none;font-weight:bold}
+.big-emoji{font-size:4rem;margin-bottom:10px}
+.visual-row{display:flex;gap:8px;align-items:center;font-size:2rem;flex-wrap:wrap;justify-content:center}
+.color-box{width:50px;height:50px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:1.2rem;cursor:pointer;transition:all .2s;border:2px solid transparent}
+.color-box:hover{transform:scale(1.1)}
+.color-box.selected{border-color:#feca57;box-shadow:0 0 15px rgba(254,202,87,.3)}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="item">📊 关卡 <span class="val" id="level">1</span></div>
+  <div class="item">⭐ 星星 <span class="val" id="stars">0</span></div>
+  <div class="item">💡 提示 <span class="val" id="hints">3</span></div>
+</div>
+<div class="puzzle-area" id="puzzle-area">
+  <div class="question" id="question"></div>
+  <div class="hint" id="hint-text"></div>
+  <div class="puzzle-content" id="puzzle-content"></div>
+  <div class="feedback" id="feedback"></div>
+  <div class="nav-btns">
+    <button class="nav-btn" onclick="showHint()">💡 提示</button>
+    <button class="nav-btn" onclick="skipLevel()">⏭️ 跳过</button>
+  </div>
+</div>
+
+<script>
+const PUZZLES=[
+  {
+    q:'下面哪个最大？',type:'choice',
+    items:['🐜 蚂蚁','🐘 大象','🐋 鲸鱼','🦈 鲨鱼'],
+    answer:2,
+    hint:'想想海洋里最大的生物'
+  },
+  {
+    q:'1 + 1 = ?',type:'input',
+    answer:'2',
+    hint:'很简单哦'
+  },
+  {
+    q:'找出不同的一个',type:'choice',
+    items:['🍎','🍊','🍋','🍇'],
+    answer:3,
+    hint:'注意颜色'
+  },
+  {
+    q:'哪个数字不是偶数？',type:'choice',
+    items:['2','4','7','8'],
+    answer:2,
+    hint:'能被2整除的是偶数'
+  },
+  {
+    q:'🍎+🍎=10, 🍎=?',type:'input',
+    answer:'5',
+    hint:'两个相同的东西加起来是10'
+  },
+  {
+    q:'点击所有红色的方块',type:'colorpick',
+    colors:[
+      {bg:'#e74c3c',correct:true},{bg:'#3498db',correct:false},
+      {bg:'#c0392b',correct:true},{bg:'#2ecc71',correct:false},
+      {bg:'#e74c3c',correct:true},{bg:'#f1c40f',correct:false},
+    ],
+    hint:'红色系的都要选'
+  },
+  {
+    q:'哪个是冬天？',type:'choice',
+    items:['☀️ 夏天','🌸 春天','❄️ 冬天','🍂 秋天'],
+    answer:2,
+    hint:'雪花飘飘的季节'
+  },
+  {
+    q:'把数字从小到大排列，输入答案（用逗号分隔）\n打乱的数字：5, 2, 8, 1',type:'input',
+    answer:'1,2,5,8',
+    hint:'最小的在前面'
+  },
+  {
+    q:'🔺有几个角？',type:'input',
+    answer:'3',
+    hint:'数一数三角形的角'
+  },
+  {
+    q:'找规律：2, 4, 6, 8, ?',type:'input',
+    answer:'10',
+    hint:'每次加2'
+  },
+  {
+    q:'哪个不是水果？',type:'choice',
+    items:['🍎 苹果','🥕 胡萝卜','🍌 香蕉','🍇 葡萄'],
+    answer:1,
+    hint:'有一种是蔬菜'
+  },
+  {
+    q:'一天有多少小时？',type:'input',
+    answer:'24',
+    hint:'地球自转一圈'
+  },
+  {
+    q:'点击蓝色的方块',type:'colorpick',
+    colors:[
+      {bg:'#e74c3c',correct:false},{bg:'#2980b9',correct:true},
+      {bg:'#27ae60',correct:false},{bg:'#3498db',correct:true},
+    ],
+    hint:'蓝色系的都要选'
+  },
+  {
+    q:'🐔+🐛=?',type:'choice',
+    items:['🐔🐛 鸡虫','🥚 蛋','🐣 小鸡','🍗 鸡腿'],
+    answer:2,
+    hint:'鸡吃了虫会怎样？脑洞大开！'
+  },
+  {
+    q:'一年有多少天？（不考虑闰年）',type:'input',
+    answer:'365',
+    hint:'12个月加起来'
+  },
+];
+
+let currentLevel=0,stars=0,hints=3,answered=false;
+
+function loadLevel(){
+  if(currentLevel>=PUZZLES.length){
+    showComplete();return;
+  }
+  answered=false;
+  const p=PUZZLES[currentLevel];
+  document.getElementById('level').textContent=currentLevel+1;
+  document.getElementById('question').textContent=p.q;
+  document.getElementById('hint-text').textContent='';
+  document.getElementById('feedback').textContent='';
+  const content=document.getElementById('puzzle-content');
+  content.innerHTML='';
+
+  if(p.type==='choice'){
+    const row=document.createElement('div');
+    row.className='answer-btns';
+    p.items.forEach((item,i)=>{
+      const btn=document.createElement('button');
+      btn.className='ans-btn';
+      btn.textContent=item;
+      btn.onclick=()=>checkChoice(btn,i,p.answer);
+      row.appendChild(btn);
+    });
+    content.appendChild(row);
+  }else if(p.type==='input'){
+    const input=document.createElement('input');
+    input.className='input-ans';
+    input.placeholder='输入答案...';
+    input.addEventListener('keydown',e=>{
+      if(e.key==='Enter')checkInput(input.value,p.answer);
+    });
+    const btn=document.createElement('button');
+    btn.className='ans-btn';btn.textContent='确认';
+    btn.onclick=()=>checkInput(input.value,p.answer);
+    content.appendChild(input);
+    content.appendChild(btn);
+  }else if(p.type==='colorpick'){
+    const grid=document.createElement('div');
+    grid.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:200px';
+    const selected=new Set();
+    const correctSet=new Set();
+    p.colors.forEach((c,i)=>{
+      if(c.correct)correctSet.add(i);
+      const box=document.createElement('div');
+      box.className='color-box';
+      box.style.background=c.bg;
+      box.onclick=()=>{
+        if(answered)return;
+        if(selected.has(i)){selected.delete(i);box.classList.remove('selected');}
+        else{selected.add(i);box.classList.add('selected');}
+        // Check if all correct selected
+        if(selected.size===correctSet.size&&[...correctSet].every(x=>selected.has(x))){
+          answered=true;
+          document.getElementById('feedback').textContent='✅ 正确！太聪明了！';
+          stars++;
+          document.getElementById('stars').textContent=stars;
+          setTimeout(()=>{currentLevel++;loadLevel();},1200);
+        }
+      };
+      grid.appendChild(box);
+    });
+    content.appendChild(grid);
+    const submitBtn=document.createElement('button');
+    submitBtn.className='ans-btn';submitBtn.textContent='确认选择';
+    submitBtn.onclick=()=>{
+      if(answered)return;
+      if(selected.size===correctSet.size&&[...correctSet].every(x=>selected.has(x))){
+        answered=true;
+        document.getElementById('feedback').textContent='✅ 正确！太聪明了！';
+        stars++;document.getElementById('stars').textContent=stars;
+        setTimeout(()=>{currentLevel++;loadLevel();},1200);
+      }else{
+        document.getElementById('feedback').textContent='❌ 再想想？';
+      }
+    };
+    content.appendChild(submitBtn);
+  }
+}
+
+function checkChoice(btn,idx,correct){
+  if(answered)return;
+  if(idx===correct){
+    btn.classList.add('correct');
+    answered=true;
+    document.getElementById('feedback').textContent='✅ 正确！太聪明了！';
+    stars++;document.getElementById('stars').textContent=stars;
+    setTimeout(()=>{currentLevel++;loadLevel();},1200);
+  }else{
+    btn.classList.add('wrong');
+    document.getElementById('feedback').textContent='❌ 再想想？';
+    setTimeout(()=>btn.classList.remove('wrong'),500);
+  }
+}
+
+function checkInput(val,correct){
+  if(answered)return;
+  const normalize=s=>s.replace(/\s+/g,'').toLowerCase();
+  if(normalize(val)===normalize(correct)){
+    answered=true;
+    document.getElementById('feedback').textContent='✅ 正确！太聪明了！';
+    stars++;document.getElementById('stars').textContent=stars;
+    setTimeout(()=>{currentLevel++;loadLevel();},1200);
+  }else{
+    document.getElementById('feedback').textContent='❌ 答案不对，再试试？';
+  }
+}
+
+function showHint(){
+  if(hints<=0)return;
+  hints--;
+  document.getElementById('hints').textContent=hints;
+  const p=PUZZLES[currentLevel];
+  document.getElementById('hint-text').textContent='💡 '+p.hint;
+}
+
+function skipLevel(){
+  currentLevel++;loadLevel();
+}
+
+function showComplete(){
+  document.getElementById('question').textContent='🎉 恭喜通关！';
+  document.getElementById('hint-text').textContent='';
+  document.getElementById('feedback').textContent=`获得 ${stars} 颗星星`;
+  document.getElementById('puzzle-content').innerHTML=`<div class="big-emoji">🏆</div><p style="color:#aab">你真是个天才！</p>`;
+  const btn=document.createElement('button');
+  btn.className='ans-btn';btn.textContent='🔄 再玩一次';
+  btn.onclick=()=>{currentLevel=0;stars=0;hints=3;document.getElementById('stars').textContent=0;document.getElementById('hints').textContent=3;loadLevel();};
+  document.getElementById('puzzle-content').appendChild(btn);
+}
+
+loadLevel();
+</script>
+</body>
+</html>

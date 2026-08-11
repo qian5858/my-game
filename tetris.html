@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>俄罗斯方块</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:linear-gradient(180deg,#0a0a1a,#1a1a2e);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden}
+.header{display:flex;gap:12px;margin-bottom:6px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+.header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
+.header .val{font-weight:bold;color:#feca57;min-width:24px;text-align:center}
+.game-area{display:flex;gap:12px;align-items:flex-start}
+.side-panel{display:flex;flex-direction:column;gap:8px;width:90px}
+.panel-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:8px;text-align:center}
+.panel-box h4{font-size:.75rem;color:#889;margin-bottom:6px}
+.mini-canvas{display:block;margin:0 auto}
+.canvas-wrap{border:2px solid #2a2a4a;border-radius:10px;overflow:hidden;box-shadow:0 0 30px rgba(72,219,251,.08)}
+canvas{display:block}
+.tip{margin-top:6px;font-size:.7rem;color:#445;text-align:center}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.65);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.8rem;margin-bottom:6px}
+.overlay p{color:#aab;margin-bottom:12px}
+.overlay .btn{padding:10px 28px;border:none;border-radius:10px;font-size:1rem;font-weight:bold;cursor:pointer;background:linear-gradient(135deg,#48dbfb,#0abde3);color:#0a1628}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="item">🏅 分数 <span class="val" id="score">0</span></div>
+  <div class="item">🏆 最高 <span class="val" id="best">0</span></div>
+  <div class="item">📊 等级 <span class="val" id="level">1</span></div>
+  <div class="item">📝 行数 <span class="val" id="lines">0</span></div>
+</div>
+<div class="game-area">
+  <div class="side-panel">
+    <div class="panel-box"><h4>保持</h4><canvas class="mini-canvas" id="holdCv" width="80" height="80"></canvas></div>
+    <div class="panel-box"><h4>下一个</h4><canvas class="mini-canvas" id="nextCv" width="80" height="80"></canvas></div>
+  </div>
+  <div class="canvas-wrap" style="position:relative">
+    <canvas id="cv" width="240" height="480"></canvas>
+    <div class="overlay" id="overlay" style="display:none">
+      <h2 id="ov-title">Game Over</h2>
+      <p id="ov-msg">分数: 0</p>
+      <button class="btn" onclick="newGame()">再来一局</button>
+    </div>
+  </div>
+</div>
+<div class="tip">← → 移动 · ↑ 旋转 · ↓ 软降 · 空格硬降 · C 保持 · P 暂停</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const holdCv=document.getElementById('holdCv'),holdCtx=holdCv.getContext('2d');
+const nextCv=document.getElementById('nextCv'),nextCtx=nextCv.getContext('2d');
+const COLS=10,ROWS=20,CELL=24;
+const COLORS=['#000','#e74c3c','#3498db','#f1c40f','#2ecc71','#9b59b6','#e67e22','#00d2d3'];
+
+const SHAPES=[
+  [],
+  [[1,1,1,1]], // I
+  [[1,0,0],[1,1,1]], // J
+  [[0,0,1],[1,1,1]], // L
+  [[1,1],[1,1]], // O
+  [[0,1,1],[1,1,0]], // S
+  [[0,1,0],[1,1,1]], // T
+  [[1,1,0],[0,1,1]], // Z
+];
+
+let board,cur,nextPiece,holdPiece,canHold,score,best,level,lines,gameOver,paused;
+let dropInterval,dropTimer,lockDelay,lockTimer;
+best=parseInt(localStorage.getItem('tetris_best')||'0');
+document.getElementById('best').textContent=best;
+
+function newGame(){
+  board=Array.from({length:ROWS},()=>Array(COLS).fill(0));
+  score=0;level=1;lines=0;gameOver=false;paused=false;
+  holdPiece=null;canHold=true;
+  document.getElementById('overlay').style.display='none';
+  nextPiece=randomPiece();
+  spawnPiece();
+  dropInterval=800;dropTimer=0;lockDelay=500;lockTimer=0;
+  updateUI();
+}
+
+function randomPiece(){
+  return Math.floor(Math.random()*7)+1;
+}
+
+function spawnPiece(){
+  cur={type:nextPiece,shape:getShape(nextPiece),x:3,y:0};
+  nextPiece=randomPiece();
+  canHold=true;
+  if(collides(cur.shape,cur.x,cur.y)){gameOver=true;showGameOver();}
+}
+
+function getShape(type){
+  return SHAPES[type].map(r=>[...r]);
+}
+
+function rotate(shape){
+  const rows=shape.length,cols=shape[0].length;
+  const result=Array.from({length:cols},()=>Array(rows).fill(0));
+  for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)result[c][rows-1-r]=shape[r][c];
+  return result;
+}
+
+function collides(shape,px,py){
+  for(let r=0;r<shape.length;r++)for(let c=0;c<shape[r].length;c++){
+    if(!shape[r][c])continue;
+    const nx=px+c,ny=py+r;
+    if(nx<0||nx>=COLS||ny>=ROWS)return true;
+    if(ny>=0&&board[ny][nx])return true;
+  }
+  return false;
+}
+
+function lock(){
+  const shape=cur.shape;
+  for(let r=0;r<shape.length;r++)for(let c=0;c<shape[r].length;c++){
+    if(!shape[r][c])continue;
+    const ny=cur.y+r;
+    if(ny<0){gameOver=true;showGameOver();return;}
+    board[ny][cur.x+c]=cur.type;
+  }
+  clearLines();
+  spawnPiece();
+}
+
+function clearLines(){
+  let cleared=0;
+  for(let r=ROWS-1;r>=0;r--){
+    if(board[r].every(c=>c)){
+      board.splice(r,1);
+      board.unshift(Array(COLS).fill(0));
+      cleared++;r++;
+    }
+  }
+  if(cleared){
+    const pts=[0,100,300,500,800];
+    score+=pts[cleared]*level;
+    lines+=cleared;
+    level=Math.floor(lines/10)+1;
+    dropInterval=Math.max(100,800-((level-1)*60));
+  }
+  updateUI();
+}
+
+function hardDrop(){
+  while(!collides(cur.shape,cur.x,cur.y+1)){cur.y++;score+=2;}
+  lock();
+  updateUI();
+}
+
+function softDrop(){
+  if(!collides(cur.shape,cur.x,cur.y+1)){cur.y++;score++;}
+  else{lockTimer+=lockDelay;} // force lock
+  updateUI();
+}
+
+function moveLeft(){if(!collides(cur.shape,cur.x-1,cur.y))cur.x--;}
+function moveRight(){if(!collides(cur.shape,cur.x+1,cur.y))cur.x++;}
+function rotatePiece(){
+  const rotated=rotate(cur.shape);
+  // Wall kick
+  const kicks=[0,-1,1,-2,2];
+  for(const kick of kicks){
+    if(!collides(rotated,cur.x+kick,cur.y)){cur.shape=rotated;cur.x+=kick;return;}
+  }
+}
+
+function holdSwap(){
+  if(!canHold)return;
+  canHold=false;
+  const prev=holdPiece;
+  holdPiece=cur.type;
+  if(prev){cur={type:prev,shape:getShape(prev),x:3,y:0};}
+  else spawnPiece();
+}
+
+function getGhostY(){
+  let gy=cur.y;
+  while(!collides(cur.shape,cur.x,gy+1))gy++;
+  return gy;
+}
+
+function showGameOver(){
+  if(score>best){best=score;localStorage.setItem('tetris_best',best);document.getElementById('best').textContent=best;}
+  document.getElementById('ov-title').textContent='Game Over';
+  document.getElementById('ov-msg').textContent=`分数: ${score}`;
+  document.getElementById('overlay').style.display='flex';
+}
+
+function updateUI(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('level').textContent=level;
+  document.getElementById('lines').textContent=lines;
+}
+
+// Draw
+function drawCell(c,x,y,size,color,alpha=1){
+  c.globalAlpha=alpha;
+  c.fillStyle=color;
+  c.fillRect(x*size+1,y*size+1,size-2,size-2);
+  // Highlight
+  c.fillStyle='rgba(255,255,255,.2)';
+  c.fillRect(x*size+1,y*size+1,size-2,3);
+  c.fillRect(x*size+1,y*size+1,3,size-2);
+  c.globalAlpha=1;
+}
+
+function drawBoard(){
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,cv.width,cv.height);
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,.03)';ctx.lineWidth=1;
+  for(let x=0;x<=COLS;x++){ctx.beginPath();ctx.moveTo(x*CELL,0);ctx.lineTo(x*CELL,ROWS*CELL);ctx.stroke();}
+  for(let y=0;y<=ROWS;y++){ctx.beginPath();ctx.moveTo(0,y*CELL);ctx.lineTo(COLS*CELL,y*CELL);ctx.stroke();}
+  // Board
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(board[r][c])drawCell(ctx,c,r,CELL,COLORS[board[r][c]]);
+  }
+}
+
+function drawGhost(){
+  if(!cur||gameOver)return;
+  const gy=getGhostY();
+  const shape=cur.shape;
+  for(let r=0;r<shape.length;r++)for(let c=0;c<shape[r].length;c++){
+    if(!shape[r][c])continue;
+    ctx.strokeStyle=COLORS[cur.type];ctx.lineWidth=1.5;ctx.globalAlpha=.3;
+    ctx.strokeRect((cur.x+c)*CELL+2,(gy+r)*CELL+2,CELL-4,CELL-4);
+    ctx.globalAlpha=1;
+  }
+}
+
+function drawCur(){
+  if(!cur||gameOver)return;
+  const shape=cur.shape;
+  for(let r=0;r<shape.length;r++)for(let c=0;c<shape[r].length;c++){
+    if(!shape[r][c])continue;
+    drawCell(ctx,cur.x+c,cur.y+r,CELL,COLORS[cur.type]);
+  }
+}
+
+function drawMini(c,type){
+  c.fillStyle='#0d1117';c.fillRect(0,0,80,80);
+  if(!type)return;
+  const shape=getShape(type);
+  const size=16;
+  const ox=(80-shape[0].length*size)/2;
+  const oy=(80-shape.length*size)/2;
+  for(let r=0;r<shape.length;r++)for(let cc=0;cc<shape[r].length;cc++){
+    if(!shape[r][cc])continue;
+    c.fillStyle=COLORS[type];
+    c.fillRect(ox+cc*size+1,oy+r*size+1,size-2,size-2);
+    c.fillStyle='rgba(255,255,255,.2)';
+    c.fillRect(ox+cc*size+1,oy+r*size+1,size-2,2);
+  }
+}
+
+let lastTime=0;
+function gameLoop(time){
+  const dt=time-lastTime;lastTime=time;
+  if(!gameOver&&!paused){
+    dropTimer+=dt;
+    if(dropTimer>=dropInterval){dropTimer=0;
+      if(!collides(cur.shape,cur.x,cur.y+1))cur.y++;
+      else{lockTimer+=lockInterval;if(lockTimer>=lockDelay){lock();lockTimer=0;}}
+    }
+  }
+  drawBoard();drawGhost();drawCur();
+  drawMini(holdCtx,holdPiece);
+  drawMini(nextCtx,nextPiece);
+  if(paused&&!gameOver){
+    ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.font='bold 24px sans-serif';ctx.textAlign='center';ctx.fillStyle='#fff';
+    ctx.fillText('暂停',cv.width/2,cv.height/2);
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+const lockInterval=100;
+
+document.addEventListener('keydown',e=>{
+  if(gameOver)return;
+  if(e.code==='KeyP'){paused=!paused;e.preventDefault();return;}
+  if(paused)return;
+  switch(e.code){
+    case'ArrowLeft':moveLeft();break;
+    case'ArrowRight':moveRight();break;
+    case'ArrowDown':softDrop();break;
+    case'ArrowUp':rotatePiece();break;
+    case'Space':hardDrop();break;
+    case'KeyC':holdSwap();break;
+  }
+  e.preventDefault();
+});
+
+// Touch controls
+let tx,ty;
+cv.addEventListener('touchstart',e=>{tx=e.touches[0].clientX;ty=e.touches[0].clientY;},{passive:true});
+cv.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-tx,dy=e.changedTouches[0].clientY-ty;
+  if(Math.abs(dx)<15&&Math.abs(dy)<15){rotatePiece();return;}
+  if(Math.abs(dx)>Math.abs(dy)){dx>0?moveRight():moveLeft();}
+  else if(dy>0)softDrop();
+  else hardDrop();
+},{passive:true});
+
+newGame();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

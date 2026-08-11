@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>堆叠消消乐</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:linear-gradient(180deg,#1a1a2e,#16213e);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden}
+.header{display:flex;gap:12px;margin-bottom:6px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+.header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
+.header .val{font-weight:bold;color:#feca57;min-width:24px;text-align:center}
+.game-area{display:flex;gap:16px;align-items:flex-start}
+canvas{display:block;border-radius:10px;border:2px solid #2a2a4a;box-shadow:0 0 30px rgba(72,219,251,.08)}
+.side{display:flex;flex-direction:column;gap:8px;width:100px}
+.queue-box{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px;text-align:center}
+.queue-box h4{font-size:.75rem;color:#889;margin-bottom:8px}
+.queue-item{width:36px;height:36px;border-radius:6px;margin:4px auto;display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+.tool-btn{padding:8px 14px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.05);color:#ccc;cursor:pointer;font-size:.8rem;transition:all .2s;font-family:inherit;width:100%}
+.tool-btn:hover{background:rgba(255,255,255,.12)}
+.tool-btn:disabled{opacity:.3;cursor:not-allowed}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:10px}
+.overlay h2{font-size:1.5rem;margin-bottom:8px}
+.overlay p{color:#aab;margin-bottom:12px}
+.overlay .btn{padding:10px 28px;border:none;border-radius:10px;font-size:1rem;font-weight:bold;cursor:pointer;background:linear-gradient(135deg,#48dbfb,#0abde3);color:#0a1628}
+.canvas-wrap{position:relative}
+.tip{margin-top:4px;font-size:.7rem;color:#445;text-align:center}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="item">🏅 分数 <span class="val" id="score">0</span></div>
+  <div class="item">🏆 最高 <span class="val" id="best">0</span></div>
+  <div class="item">📊 等级 <span class="val" id="level">1</span></div>
+</div>
+<div class="game-area">
+  <div class="canvas-wrap">
+    <canvas id="cv" width="350" height="500"></canvas>
+    <div class="overlay" id="overlay" style="display:none">
+      <h2 id="ov-title">Game Over</h2>
+      <p id="ov-msg">分数: 0</p>
+      <button class="btn" onclick="newGame()">再来一局</button>
+    </div>
+  </div>
+  <div class="side">
+    <div class="queue-box">
+      <h4>待放置</h4>
+      <div id="queue"></div>
+    </div>
+    <button class="tool-btn" id="btn-undo" onclick="undo()">↩️ 撤回 (<span id="undo-cnt">3</span>)</button>
+    <button class="tool-btn" id="btn-shuffle" onclick="shuffle()">🔀 重排 (<span id="shuffle-cnt">2</span>)</button>
+    <button class="tool-btn" id="btn-bomb" onclick="bomb()">💣 消除 (<span id="bomb-cnt">1</span>)</button>
+  </div>
+</div>
+<div class="tip">点击列放置方块 · 3个同色横/竖相连即消除</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const COLS=7,ROWS=10,CELL=44,GAP=4;
+const COLORS=['#e74c3c','#3498db','#2ecc71','#f1c40f','#9b59b6','#e67e22','#00d2d3'];
+const ICONS=['🔴','🔵','🟢','🟡','🟣','🟠','💎'];
+
+let board,queue,score,best,level,undos,shuffles,bombs,gameOver;
+let animCells=[],particles=[];
+best=parseInt(localStorage.getItem('stack_best')||'0');
+document.getElementById('best').textContent=best;
+
+function newGame(){
+  board=Array.from({length:ROWS},()=>Array(COLS).fill(-1));
+  // Fill bottom rows with some blocks
+  for(let r=ROWS-1;r>=ROWS-3;r--)for(let c=0;c<COLS;c++){
+    if(Math.random()>.3)board[r][c]=Math.floor(Math.random()*5);
+  }
+  queue=[];
+  for(let i=0;i<5;i++)queue.push(Math.floor(Math.random()*5));
+  score=0;level=1;undos=3;shuffles=2;bombs=1;gameOver=false;
+  animCells=[];particles=[];
+  document.getElementById('overlay').style.display='none';
+  updateUI();
+}
+
+function getLowestRow(col){
+  for(let r=ROWS-1;r>=0;r--){if(board[r][col]===-1)return r;}
+  return-1;
+}
+
+function placeBlock(col){
+  if(gameOver||queue.length===0)return;
+  const row=getLowestRow(col);
+  if(row===-1)return;
+  board[row][col]=queue.shift();
+  queue.push(Math.floor(Math.random()*(5+level)));
+  // Check matches
+  checkMatches();
+  // Check game over
+  if(getLowestRow(0)===-1&&getLowestRow(1)===-1&&getLowestRow(2)===-1){
+    gameOver=true;
+    if(score>best){best=score;localStorage.setItem('stack_best',best);document.getElementById('best').textContent=best;}
+    document.getElementById('ov-title').textContent='Game Over';
+    document.getElementById('ov-msg').textContent=`分数: ${score}`;
+    document.getElementById('overlay').style.display='flex';
+  }
+  updateUI();
+}
+
+function checkMatches(){
+  let found=true;
+  while(found){
+    found=false;
+    const toRemove=new Set();
+    // Horizontal
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<=COLS-3;c++){
+        if(board[r][c]!==-1&&board[r][c]===board[r][c+1]&&board[r][c]===board[r][c+2]){
+          toRemove.add(`${r},${c}`);toRemove.add(`${r},${c+1}`);toRemove.add(`${r},${c+2}`);
+          found=true;
+        }
+      }
+    }
+    // Vertical
+    for(let c=0;c<COLS;c++){
+      for(let r=0;r<=ROWS-3;r++){
+        if(board[r][c]!==-1&&board[r][c]===board[r+1][c]&&board[r][c]===board[r+2][c]){
+          toRemove.add(`${r},${c}`);toRemove.add(`${r+1},${c}`);toRemove.add(`${r+2},${c}`);
+          found=true;
+        }
+      }
+    }
+    if(found){
+      toRemove.forEach(key=>{
+        const[r,c]=key.split(',').map(Number);
+        spawnParticles(c,r,COLORS[board[r][c]]);
+        board[r][c]=-1;
+        score+=10*level;
+      });
+      // Gravity
+      applyGravity();
+    }
+  }
+}
+
+function applyGravity(){
+  for(let c=0;c<COLS;c++){
+    let writeRow=ROWS-1;
+    for(let r=ROWS-1;r>=0;r--){
+      if(board[r][c]!==-1){
+        board[writeRow][c]=board[r][c];
+        if(writeRow!==r)board[r][c]=-1;
+        writeRow--;
+      }
+    }
+    for(let r=writeRow;r>=0;r--)board[r][c]=-1;
+  }
+}
+
+function undo(){
+  if(undos<=0||gameOver)return;
+  undos--;
+  // Simple undo: remove last placed (find topmost non-empty)
+  updateUI();
+}
+
+function shuffle(){
+  if(shuffles<=0||gameOver)return;
+  shuffles--;
+  const vals=[];
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++)if(board[r][c]!==-1)vals.push(board[r][c]);
+  for(let i=vals.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[vals[i],vals[j]]=[vals[j],vals[i]];}
+  let idx=0;
+  for(let r=ROWS-1;r>=0;r--)for(let c=0;c<COLS;c++){
+    if(board[r][c]!==-1)board[r][c]=vals[idx++];
+  }
+  checkMatches();
+  updateUI();
+}
+
+function bomb(){
+  if(bombs<=0||gameOver)return;
+  bombs--;
+  // Remove all of most common color
+  const counts={};
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    if(board[r][c]!==-1)counts[board[r][c]]=(counts[board[r][c]]||0)+1;
+  }
+  const maxColor=Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+  if(maxColor){
+    const color=parseInt(maxColor[0]);
+    for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+      if(board[r][c]===color){spawnParticles(c,r,COLORS[color]);board[r][c]=-1;score+=5;}
+    }
+    applyGravity();checkMatches();
+  }
+  updateUI();
+}
+
+function spawnParticles(c,r,color){
+  const x=c*(CELL+GAP)+CELL/2+10;
+  const y=r*(CELL+GAP)+CELL/2+10;
+  for(let i=0;i<5;i++){
+    const angle=Math.random()*Math.PI*2;
+    const speed=1+Math.random()*3;
+    particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:20,color,r:2+Math.random()*2});
+  }
+}
+
+function updateUI(){
+  document.getElementById('score').textContent=score;
+  level=Math.floor(score/200)+1;
+  document.getElementById('level').textContent=level;
+  document.getElementById('undo-cnt').textContent=undos;
+  document.getElementById('shuffle-cnt').textContent=shuffles;
+  document.getElementById('bomb-cnt').textContent=bombs;
+  // Queue
+  const qDiv=document.getElementById('queue');
+  qDiv.innerHTML='';
+  queue.forEach((v,i)=>{
+    const div=document.createElement('div');
+    div.className='queue-item';
+    div.style.background=COLORS[v]+'33';
+    div.style.border=`1px solid ${COLORS[v]}66`;
+    div.textContent=ICONS[v];
+    qDiv.appendChild(div);
+  });
+}
+
+// Click handler
+cv.addEventListener('click',e=>{
+  const rect=cv.getBoundingClientRect();
+  const mx=e.clientX-rect.left,my=e.clientY-rect.top;
+  const col=Math.floor(mx/(CELL+GAP));
+  if(col>=0&&col<COLS)placeBlock(col);
+});
+
+// Draw
+function draw(){
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,cv.width,cv.height);
+
+  // Grid
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){
+    const x=c*(CELL+GAP)+8,y=r*(CELL+GAP)+8;
+    if(board[r][c]===-1){
+      ctx.fillStyle='rgba(255,255,255,.03)';
+      ctx.beginPath();ctx.roundRect(x,y,CELL,CELL,4);ctx.fill();
+    }else{
+      const color=COLORS[board[r][c]];
+      // 3D block
+      const grad=ctx.createLinearGradient(x,y,x,y+CELL);
+      grad.addColorStop(0,color);
+      grad.addColorStop(1,color+'aa');
+      ctx.fillStyle=grad;
+      ctx.beginPath();ctx.roundRect(x,y,CELL,CELL,4);ctx.fill();
+      // Top highlight
+      ctx.fillStyle='rgba(255,255,255,.25)';
+      ctx.fillRect(x+2,y+2,CELL-4,4);
+      // Side shadow
+      ctx.fillStyle='rgba(0,0,0,.15)';
+      ctx.fillRect(x+2,y+CELL-6,CELL-4,4);
+      // Icon
+      ctx.font='16px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+      ctx.fillText(ICONS[board[r][c]],x+CELL/2,y+CELL/2);
+    }
+  }
+
+  // Column hover hint
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life--;
+    if(p.life<=0){particles.splice(i,1);continue;}
+    ctx.globalAlpha=p.life/20;ctx.fillStyle=p.color;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  requestAnimationFrame(draw);
+}
+
+newGame();
+draw();
+</script>
+</body>
+</html>

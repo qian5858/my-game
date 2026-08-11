@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>消消乐</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    min-height: 100vh;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; color: #e0e0e0; user-select: none;
+    overflow: hidden;
+  }
+  h1 {
+    font-size: 2.2rem; margin-bottom: 10px; letter-spacing: 6px;
+    background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb, #ff9ff3, #54a0ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    text-shadow: none; filter: drop-shadow(0 0 12px rgba(255,255,255,.15));
+  }
+
+  /* 信息栏 */
+  .info-bar {
+    display: flex; gap: 16px; margin-bottom: 14px; font-size: 1.05rem;
+    flex-wrap: wrap; justify-content: center;
+  }
+  .info-bar .item {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.06); padding: 6px 14px; border-radius: 20px;
+  }
+  .info-bar .val { font-weight: bold; color: #feca57; min-width: 28px; text-align: center; }
+
+  /* 进度条 */
+  .progress-wrap {
+    width: 100%; max-width: 480px; margin-bottom: 12px;
+  }
+  .progress-bar {
+    height: 14px; background: rgba(255,255,255,.08); border-radius: 10px;
+    overflow: hidden; position: relative;
+  }
+  .progress-fill {
+    height: 100%; border-radius: 10px;
+    background: linear-gradient(90deg, #ff6b6b, #feca57, #48dbfb);
+    transition: width .4s ease; width: 0%;
+  }
+  .progress-label {
+    display: flex; justify-content: space-between; font-size: .8rem;
+    color: #8899aa; margin-top: 4px;
+  }
+
+  /* 棋盘 */
+  .board-wrap {
+    position: relative; padding: 10px;
+    background: rgba(0,0,0,.35); border-radius: 16px;
+    box-shadow: 0 0 40px rgba(100,100,255,.12);
+  }
+  .board { position: relative; }
+
+  /* 宝石 */
+  .gem {
+    position: absolute; border-radius: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.7rem; transition: left .25s ease, top .25s ease, transform .2s, opacity .25s;
+    box-shadow:
+      inset 0 4px 8px rgba(255,255,255,.35),
+      inset 0 -4px 8px rgba(0,0,0,.3),
+      0 4px 12px rgba(0,0,0,.4);
+  }
+  /* 3D 高光层 */
+  .gem::before {
+    content: ''; position: absolute; inset: 3px;
+    border-radius: 13px; pointer-events: none;
+    background: radial-gradient(ellipse at 35% 25%, rgba(255,255,255,.55) 0%, transparent 55%);
+  }
+  /* 底部反光 */
+  .gem::after {
+    content: ''; position: absolute; bottom: 4px; left: 20%; right: 20%;
+    height: 6px; border-radius: 50%;
+    background: rgba(255,255,255,.12);
+    filter: blur(2px);
+  }
+  /* 7种宝石的3D底色 */
+  .gem.g0 { background: radial-gradient(circle at 40% 35%, #ff8a80, #d32f2f 70%, #8b0000); }
+  .gem.g1 { background: radial-gradient(circle at 40% 35%, #b9f6ca, #2e7d32 70%, #1b5e20); }
+  .gem.g2 { background: radial-gradient(circle at 40% 35%, #82b1ff, #1565c0 70%, #0d47a1); }
+  .gem.g3 { background: radial-gradient(circle at 40% 35%, #fff9c4, #f9a825 70%, #e65100); }
+  .gem.g4 { background: radial-gradient(circle at 40% 35%, #ea80fc, #8e24aa 70%, #4a148c); }
+  .gem.g5 { background: radial-gradient(circle at 40% 35%, #ffcc80, #e65100 70%, #bf360c); }
+  .gem.g6 { background: radial-gradient(circle at 40% 35%, #80deea, #00838f 70%, #004d40); }
+  .gem:hover { transform: scale(1.12) rotateZ(-3deg); z-index: 2; }
+  .gem.selected {
+    animation: pulse .6s infinite alternate;
+    box-shadow:
+      inset 0 4px 8px rgba(255,255,255,.35),
+      inset 0 -4px 8px rgba(0,0,0,.3),
+      0 0 20px 6px rgba(255,255,255,.55);
+    z-index: 3;
+  }
+  .gem.matched {
+    animation: pop .35s forwards;
+    pointer-events: none;
+  }
+  .gem.falling { transition: top .3s ease-in; }
+  .gem.spawning { animation: spawnIn .3s ease-out; }
+
+  @keyframes pulse {
+    from { transform: scale(1); }
+    to   { transform: scale(1.15); }
+  }
+  @keyframes pop {
+    0%   { transform: scale(1); opacity: 1; }
+    50%  { transform: scale(1.4); opacity: .6; }
+    100% { transform: scale(0); opacity: 0; }
+  }
+  @keyframes spawnIn {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+
+  /* 分数飘字 */
+  .float-score {
+    position: absolute; font-size: 1.2rem; font-weight: bold;
+    color: #feca57; pointer-events: none; z-index: 10;
+    animation: floatUp .8s forwards;
+    text-shadow: 0 0 6px rgba(254,202,87,.6);
+  }
+  @keyframes floatUp {
+    0%   { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-50px) scale(1.3); }
+  }
+
+  /* 弹窗 */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; backdrop-filter: blur(4px);
+  }
+  .overlay.hidden { display: none; }
+  .modal {
+    background: linear-gradient(135deg, #1a1a3e, #2d2b55); padding: 36px 52px;
+    border-radius: 20px; text-align: center;
+    box-shadow: 0 0 50px rgba(100,100,255,.2);
+  }
+  .modal h2 { font-size: 1.8rem; margin-bottom: 8px; color: #feca57; }
+  .modal p  { margin-bottom: 18px; color: #aaa; font-size: 1.05rem; }
+  .modal button {
+    padding: 10px 36px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #feca57, #ff6b6b);
+    color: #1a1a3e; font-size: 1rem; font-weight: bold;
+    cursor: pointer; transition: transform .2s;
+  }
+  .modal button:hover { transform: scale(1.06); }
+
+  /* 音乐开关 */
+  .music-btn {
+    position: fixed; top: 16px; right: 16px; z-index: 200;
+    width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(255,255,255,.08); border: 2px solid rgba(255,255,255,.15);
+    color: #e0e0e0; font-size: 1.3rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .2s;
+  }
+  .music-btn:hover { background: rgba(255,255,255,.15); }
+  .music-btn.muted { opacity: .4; }
+
+  /* 连击提示 */
+  .combo-text {
+    position: absolute; top: -36px; left: 50%; transform: translateX(-50%);
+    font-size: 1.4rem; font-weight: bold; color: #ff6b6b;
+    opacity: 0; transition: opacity .3s;
+    text-shadow: 0 0 10px rgba(255,107,107,.5);
+    white-space: nowrap;
+  }
+  .combo-text.show { opacity: 1; animation: comboShake .4s; }
+  @keyframes comboShake {
+    0%,100% { transform: translateX(-50%) rotate(0); }
+    25% { transform: translateX(-50%) rotate(-4deg) scale(1.1); }
+    75% { transform: translateX(-50%) rotate(4deg) scale(1.1); }
+  }
+</style>
+</head>
+<body>
+
+<button class="music-btn" id="music-btn" onclick="toggleMusic()" title="音乐开关">🔊</button>
+<h1>✨ 消 消 乐 ✨</h1>
+
+<div class="info-bar">
+  <div class="item">⭐ 关卡 <span class="val" id="level-num">1</span>/10</div>
+  <div class="item">🏆 分数 <span class="val" id="score">0</span></div>
+  <div class="item">🎯 目标 <span class="val" id="target">300</span></div>
+  <div class="item">🔄 步数 <span class="val" id="moves">35</span></div>
+  <div class="item">🔥 连击 <span class="val" id="combo">0</span></div>
+</div>
+
+<div class="progress-wrap">
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+  <div class="progress-label">
+    <span id="progress-text">0 / 300</span>
+    <span id="gem-types-text">宝石: 4种</span>
+  </div>
+</div>
+
+<div class="board-wrap">
+  <div class="combo-text" id="combo-text"></div>
+  <div class="board" id="board"></div>
+</div>
+
+<div class="overlay hidden" id="overlay">
+  <div class="modal">
+    <h2 id="result-title">游戏结束</h2>
+    <p id="result-msg"></p>
+    <div id="modal-buttons"></div>
+  </div>
+</div>
+
+<script>
+/* ========== Web Audio 音效系统 ========== */
+let audioCtx, musicOn = true, bgmTimer = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+/* 播放单个音符 */
+function playNote(freq, duration, type, vol, delay) {
+  if (!audioCtx || !musicOn) return;
+  const t = audioCtx.currentTime + (delay || 0);
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type || 'sine';
+  osc.frequency.setValueAtTime(freq, t);
+  gain.gain.setValueAtTime(vol || 0.12, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t); osc.stop(t + duration);
+}
+
+/* 音效：交换 */
+function sfxSwap() {
+  initAudio();
+  playNote(520, 0.1, 'sine', 0.10);
+  playNote(680, 0.1, 'sine', 0.10, 0.06);
+}
+
+/* 音效：消除 */
+function sfxMatch(comboN) {
+  initAudio();
+  const base = 600 + comboN * 80;
+  playNote(base, 0.15, 'sine', 0.12);
+  playNote(base * 1.25, 0.15, 'sine', 0.10, 0.07);
+  playNote(base * 1.5, 0.18, 'sine', 0.08, 0.14);
+}
+
+/* 音效：无效交换 */
+function sfxBadSwap() {
+  initAudio();
+  playNote(200, 0.15, 'square', 0.06);
+  playNote(160, 0.2, 'square', 0.05, 0.1);
+}
+
+/* 音效：过关 */
+function sfxLevelUp() {
+  initAudio();
+  const notes = [523, 659, 784, 1047];
+  notes.forEach((f, i) => playNote(f, 0.25, 'sine', 0.12, i * 0.12));
+}
+
+/* 音效：失败 */
+function sfxFail() {
+  initAudio();
+  playNote(400, 0.2, 'sawtooth', 0.06);
+  playNote(300, 0.25, 'sawtooth', 0.05, 0.15);
+  playNote(200, 0.35, 'sawtooth', 0.04, 0.3);
+}
+
+/* 背景音乐：简单循环旋律 */
+function startBGM() {
+  stopBGM();
+  if (!audioCtx) initAudio();
+  const melody = [
+    523, 0, 659, 0, 784, 0, 659, 0,
+    523, 0, 784, 0, 659, 0, 523, 0,
+    587, 0, 698, 0, 880, 0, 698, 0,
+    587, 0, 880, 0, 698, 0, 587, 0,
+  ];
+  let idx = 0;
+  bgmTimer = setInterval(() => {
+    if (!musicOn) return;
+    const freq = melody[idx % melody.length];
+    if (freq > 0) playNote(freq, 0.22, 'sine', 0.04);
+    idx++;
+  }, 280);
+}
+function stopBGM() { if (bgmTimer) { clearInterval(bgmTimer); bgmTimer = null; } }
+
+function toggleMusic() {
+  musicOn = !musicOn;
+  const btn = document.getElementById('music-btn');
+  btn.textContent = musicOn ? '🔊' : '🔇';
+  btn.classList.toggle('muted', !musicOn);
+  if (musicOn) { initAudio(); startBGM(); } else { stopBGM(); }
+}
+
+/* ========== 游戏逻辑 ========== */
+const ROWS = 8, COLS = 8, CELL = 56, GAP = 4, GEM_SIZE = 44;
+const ALL_GEMS = [
+  { icon: '🍓', cls: 'g0' },   // 草莓 红
+  { icon: '🍀', cls: 'g1' },   // 四叶草 绿
+  { icon: '💙', cls: 'g2' },   // 蓝心
+  { icon: '⭐', cls: 'g3' },   // 星星 黄
+  { icon: '🔮', cls: 'g4' },   // 水晶球 紫
+  { icon: '🍊', cls: 'g5' },   // 橘子 橙
+  { icon: '💎', cls: 'g6' },   // 钻石 青
+];
+
+/* 10个关卡配置：宝石种类递增、步数递减、目标分数递增 */
+const LEVELS = [
+  { gems: 4, moves: 35, target: 300  },   // Lv1
+  { gems: 4, moves: 33, target: 500  },   // Lv2
+  { gems: 5, moves: 32, target: 750  },   // Lv3
+  { gems: 5, moves: 30, target: 1000 },   // Lv4
+  { gems: 5, moves: 28, target: 1300 },   // Lv5
+  { gems: 6, moves: 27, target: 1650 },   // Lv6
+  { gems: 6, moves: 25, target: 2000 },   // Lv7
+  { gems: 6, moves: 23, target: 2400 },   // Lv8
+  { gems: 7, moves: 22, target: 2900 },   // Lv9
+  { gems: 7, moves: 20, target: 3500 },   // Lv10
+];
+
+let currentLevel, GEMS, grid, selected, score, moves, combo, busy;
+const boardEl     = document.getElementById('board');
+const scoreEl     = document.getElementById('score');
+const movesEl     = document.getElementById('moves');
+const comboEl     = document.getElementById('combo');
+const levelEl     = document.getElementById('level-num');
+const targetEl    = document.getElementById('target');
+const progressFill= document.getElementById('progress-fill');
+const progressText= document.getElementById('progress-text');
+const gemTypesText= document.getElementById('gem-types-text');
+const comboTextEl = document.getElementById('combo-text');
+const overlayEl   = document.getElementById('overlay');
+const modalBtns   = document.getElementById('modal-buttons');
+
+boardEl.style.width  = COLS * (CELL + GAP) + 'px';
+boardEl.style.height = ROWS * (CELL + GAP) + 'px';
+
+function loadLevel(lv) {
+  currentLevel = lv;
+  const cfg = LEVELS[lv];
+  GEMS = ALL_GEMS.slice(0, cfg.gems);
+  score = 0; moves = cfg.moves; combo = 0; selected = null; busy = false;
+  scoreEl.textContent = score;
+  movesEl.textContent = moves;
+  comboEl.textContent = combo;
+  levelEl.textContent = lv + 1;
+  targetEl.textContent = cfg.target;
+  updateProgress();
+  gemTypesText.textContent = '宝石: ' + cfg.gems + '种';
+  overlayEl.classList.add('hidden');
+  comboTextEl.classList.remove('show');
+  initGrid();
+  renderBoard();
+}
+
+function updateProgress() {
+  const cfg = LEVELS[currentLevel];
+  const pct = Math.min(100, score / cfg.target * 100);
+  progressFill.style.width = pct + '%';
+  progressText.textContent = score + ' / ' + cfg.target;
+}
+
+/* ---- 初始化棋盘（保证无初始匹配） ---- */
+function initGrid() {
+  grid = [];
+  for (let r = 0; r < ROWS; r++) {
+    grid[r] = [];
+    for (let c = 0; c < COLS; c++) {
+      let type;
+      do {
+        type = randGem();
+      } while (
+        (c >= 2 && grid[r][c-1] === type && grid[r][c-2] === type) ||
+        (r >= 2 && grid[r-1][c] === type && grid[r-2][c] === type)
+      );
+      grid[r][c] = type;
+    }
+  }
+}
+
+function randGem() { return Math.floor(Math.random() * GEMS.length); }
+
+/* ---- 渲染 ---- */
+function renderBoard() {
+  boardEl.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (grid[r][c] < 0) continue;
+      const gem = createGemEl(r, c, grid[r][c]);
+      boardEl.appendChild(gem);
+    }
+  }
+}
+
+function createGemEl(r, c, type) {
+  const el = document.createElement('div');
+  const gemDef = GEMS[type];
+  el.className = 'gem ' + gemDef.cls;
+  el.textContent = gemDef.icon;
+  const offset = (CELL - GEM_SIZE) / 2;
+  el.style.width  = GEM_SIZE + 'px';
+  el.style.height = GEM_SIZE + 'px';
+  el.style.left = c * (CELL + GAP) + offset + 'px';
+  el.style.top  = r * (CELL + GAP) + offset + 'px';
+  el.dataset.r = r; el.dataset.c = c;
+  el.addEventListener('click', () => onGemClick(r, c));
+  return el;
+}
+
+function getGemEl(r, c) {
+  return boardEl.querySelector(`.gem[data-r="${r}"][data-c="${c}"]`);
+}
+
+/* ---- 点击逻辑 ---- */
+function onGemClick(r, c) {
+  if (busy || moves <= 0) return;
+  if (!selected) {
+    selected = { r, c };
+    const el = getGemEl(r, c);
+    if (el) el.classList.add('selected');
+    return;
+  }
+  const prev = selected;
+  const prevEl = getGemEl(prev.r, prev.c);
+  if (prevEl) prevEl.classList.remove('selected');
+
+  // 点击同一个 → 取消选中
+  if (prev.r === r && prev.c === c) { selected = null; return; }
+
+  // 不相邻 → 重新选中
+  const dist = Math.abs(prev.r - r) + Math.abs(prev.c - c);
+  if (dist !== 1) {
+    selected = { r, c };
+    const el = getGemEl(r, c);
+    if (el) el.classList.add('selected');
+    return;
+  }
+
+  selected = null;
+  sfxSwap();
+  trySwap(prev.r, prev.c, r, c);
+}
+
+/* ---- 交换 & 匹配 ---- */
+async function trySwap(r1, c1, r2, c2) {
+  busy = true;
+  swap(r1, c1, r2, c2);
+  await animateSwap(r1, c1, r2, c2);
+
+  const matches = findMatches();
+  if (matches.length === 0) {
+    // 无匹配 → 换回
+    sfxBadSwap();
+    swap(r1, c1, r2, c2);
+    await animateSwap(r1, c1, r2, c2);
+    busy = false;
+    return;
+  }
+
+  moves--;
+  movesEl.textContent = moves;
+  combo = 0;
+
+  await resolveMatches();
+  busy = false;
+
+  if (moves <= 0) checkLevelResult();
+}
+
+function swap(r1, c1, r2, c2) {
+  [grid[r1][c1], grid[r2][c2]] = [grid[r2][c2], grid[r1][c1]];
+}
+
+async function animateSwap(r1, c1, r2, c2) {
+  const el1 = getGemEl(r1, c1);
+  const el2 = getGemEl(r2, c2);
+  const off = (CELL - GEM_SIZE) / 2;
+  if (el1) { el1.style.left = c1 * (CELL+GAP) + off + 'px'; el1.style.top = r1 * (CELL+GAP) + off + 'px'; el1.dataset.r = r1; el1.dataset.c = c1; }
+  if (el2) { el2.style.left = c2 * (CELL+GAP) + off + 'px'; el2.style.top = r2 * (CELL+GAP) + off + 'px'; el2.dataset.r = r2; el2.dataset.c = c2; }
+  await sleep(260);
+}
+
+/* ---- 查找匹配 ---- */
+function findMatches() {
+  const matched = new Set();
+  // 横向
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS - 2; c++) {
+      const t = grid[r][c];
+      if (t < 0) continue;
+      if (grid[r][c+1] === t && grid[r][c+2] === t) {
+        let end = c + 2;
+        while (end + 1 < COLS && grid[r][end+1] === t) end++;
+        for (let i = c; i <= end; i++) matched.add(r * COLS + i);
+      }
+    }
+  }
+  // 纵向
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS - 2; r++) {
+      const t = grid[r][c];
+      if (t < 0) continue;
+      if (grid[r+1][c] === t && grid[r+2][c] === t) {
+        let end = r + 2;
+        while (end + 1 < ROWS && grid[end+1][c] === t) end++;
+        for (let i = r; i <= end; i++) matched.add(i * COLS + c);
+      }
+    }
+  }
+  return [...matched].map(v => ({ r: Math.floor(v / COLS), c: v % COLS }));
+}
+
+/* ---- 消除 & 下落循环 ---- */
+async function resolveMatches() {
+  let matches = findMatches();
+  while (matches.length > 0) {
+    combo++;
+    comboEl.textContent = combo;
+    if (combo >= 2) showCombo(combo);
+
+    sfxMatch(combo);
+    const pts = matches.length * 10 * combo;
+    score += pts;
+    scoreEl.textContent = score;
+    updateProgress();
+
+    // 显示飘分
+    const mid = matches[Math.floor(matches.length / 2)];
+    showFloatScore(mid.r, mid.c, pts);
+
+    // 消除动画
+    for (const { r, c } of matches) {
+      const el = getGemEl(r, c);
+      if (el) el.classList.add('matched');
+    }
+    await sleep(360);
+
+    // 移除
+    for (const { r, c } of matches) {
+      grid[r][c] = -1;
+      const el = getGemEl(r, c);
+      if (el) el.remove();
+    }
+
+    // 下落
+    await dropAndFill();
+    matches = findMatches();
+  }
+}
+
+async function dropAndFill() {
+  const off = (CELL - GEM_SIZE) / 2;
+  // 逐列处理下落
+  for (let c = 0; c < COLS; c++) {
+    let emptyRow = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (grid[r][c] >= 0) {
+        if (r !== emptyRow) {
+          grid[emptyRow][c] = grid[r][c];
+          grid[r][c] = -1;
+          const el = getGemEl(r, c);
+          if (el) {
+            el.dataset.r = emptyRow;
+            el.style.top = emptyRow * (CELL + GAP) + off + 'px';
+            el.classList.add('falling');
+          }
+        }
+        emptyRow--;
+      }
+    }
+    // 填充空位
+    for (let r = emptyRow; r >= 0; r--) {
+      const type = randGem();
+      grid[r][c] = type;
+      const el = createGemEl(r, c, type);
+      el.style.top = (-1 * (CELL + GAP)) + 'px'; // 从上方进入
+      el.classList.add('spawning');
+      boardEl.appendChild(el);
+      // 触发 reflow 后移到正确位置
+      void el.offsetHeight;
+      el.style.top = r * (CELL + GAP) + off + 'px';
+      el.classList.add('falling');
+    }
+  }
+  await sleep(350);
+  // 清理 class
+  boardEl.querySelectorAll('.falling,.spawning').forEach(el => {
+    el.classList.remove('falling', 'spawning');
+  });
+}
+
+/* ---- 特效 ---- */
+function showFloatScore(r, c, pts) {
+  const el = document.createElement('div');
+  el.className = 'float-score';
+  el.textContent = '+' + pts;
+  el.style.left = c * (CELL + GAP) + CELL / 2 + 'px';
+  el.style.top  = r * (CELL + GAP) + 'px';
+  boardEl.appendChild(el);
+  setTimeout(() => el.remove(), 850);
+}
+
+function showCombo(n) {
+  const labels = ['','','双连击！','三连击！','四连击！','五连击！','超级连击！','无敌连击！！'];
+  comboTextEl.textContent = '🔥 ' + (labels[n] || n + '连击！！！');
+  comboTextEl.classList.remove('show');
+  void comboTextEl.offsetHeight;
+  comboTextEl.classList.add('show');
+  setTimeout(() => comboTextEl.classList.remove('show'), 1200);
+}
+
+/* ---- 关卡结算 ---- */
+function checkLevelResult() {
+  const cfg = LEVELS[currentLevel];
+  setTimeout(() => {
+    if (score >= cfg.target) {
+      sfxLevelUp();
+      // 过关
+      if (currentLevel >= LEVELS.length - 1) {
+        document.getElementById('result-title').textContent = '🎊 恭喜通关！';
+        document.getElementById('result-msg').textContent =
+          `你已通关全部 10 关！最终得分：${score} 分`;
+        modalBtns.innerHTML = '<button onclick="loadLevel(0)">从头开始</button>';
+      } else {
+        document.getElementById('result-title').textContent = '⭐ 关卡通过！';
+        document.getElementById('result-msg').textContent =
+          `第 ${currentLevel + 1} 关完成！得分：${score} / ${cfg.target}`;
+        modalBtns.innerHTML = '<button onclick="loadLevel(' + (currentLevel + 1) + ')">下一关 ▶</button>';
+      }
+    } else {
+      sfxFail();
+      document.getElementById('result-title').textContent = '💫 挑战失败';
+      document.getElementById('result-msg').textContent =
+        `得分 ${score} / 目标 ${cfg.target}，差 ${cfg.target - score} 分`;
+      modalBtns.innerHTML =
+        '<button onclick="loadLevel(' + currentLevel + ')">重新挑战</button>' +
+        '<button onclick="loadLevel(0)" style="margin-left:10px;background:linear-gradient(135deg,#48dbfb,#54a0ff)">回到第1关</button>';
+    }
+    overlayEl.classList.remove('hidden');
+  }, 400);
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+loadLevel(0);
+
+/* 首次点击页面后启动背景音乐 */
+document.addEventListener('click', function _bgm() {
+  initAudio();
+  if (musicOn) startBGM();
+  document.removeEventListener('click', _bgm);
+});
+</script>
+</body>
+</html>

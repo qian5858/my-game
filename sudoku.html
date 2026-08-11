@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>数独</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:linear-gradient(180deg,#0a0a1a,#1a1a2e);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden}
+.header{display:flex;gap:12px;margin-bottom:6px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+.header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
+.header .val{font-weight:bold;color:#feca57;min-width:24px;text-align:center}
+.board{display:grid;grid-template-columns:repeat(9,1fr);gap:1px;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;width:min(380px,90vw);height:min(380px,90vw)}
+.cell{background:rgba(13,17,23,.9);display:flex;align-items:center;justify-content:center;font-size:clamp(14px,3.5vw,22px);cursor:pointer;transition:background .15s;position:relative;aspect-ratio:1}
+.cell:hover{background:rgba(72,219,251,.1)}
+.cell.given{color:#48dbfb;font-weight:bold}
+.cell.user{color:#2ecc71}
+.cell.selected{background:rgba(72,219,251,.2);box-shadow:inset 0 0 10px rgba(72,219,251,.2)}
+.cell.same-num{background:rgba(72,219,251,.08)}
+.cell.same-row-col{background:rgba(255,255,255,.03)}
+.cell.error{color:#e74c3c;animation:shake .3s}
+.cell.hint-cell{animation:hintPulse .5s ease}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+@keyframes hintPulse{0%{background:rgba(254,202,87,.3)}100%{background:transparent}}
+.cell.border-right{border-right:2px solid rgba(255,255,255,.2)}
+.cell.border-bottom{border-bottom:2px solid rgba(255,255,255,.2)}
+.cell .notes{display:grid;grid-template-columns:repeat(3,1fr);font-size:clamp(6px,1.5vw,9px);color:#667;width:100%;height:100%;position:absolute;top:0;left:0}
+.cell .notes span{display:flex;align-items:center;justify-content:center}
+.numpad{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;justify-content:center}
+.num-btn{width:38px;height:38px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.05);color:#e0e0e0;font-size:1.1rem;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;font-family:inherit}
+.num-btn:hover{background:rgba(255,255,255,.12)}
+.num-btn.active{border-color:#48dbfb;background:rgba(72,219,251,.15);color:#48dbfb}
+.num-btn.done{opacity:.3}
+.tools{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;justify-content:center}
+.tool-btn{padding:6px 14px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.05);color:#aab;cursor:pointer;font-size:.8rem;transition:all .2s;font-family:inherit}
+.tool-btn:hover{background:rgba(255,255,255,.12)}
+.diff-btns{display:flex;gap:6px;margin-top:4px}
+.diff-btn{padding:5px 12px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.05);color:#aab;cursor:pointer;font-size:.75rem;transition:all .2s;font-family:inherit}
+.diff-btn:hover{background:rgba(255,255,255,.12)}
+.diff-btn.active{border-color:#feca57;background:rgba(254,202,87,.1);color:#feca57}
+.timer{font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="item">⏱️ <span class="val timer" id="timer">0:00</span></div>
+  <div class="item">❌ 错误 <span class="val" id="errors">0</span></div>
+  <div class="item">💡 提示 <span class="val" id="hints">3</span></div>
+</div>
+<div class="board" id="board"></div>
+<div class="numpad" id="numpad"></div>
+<div class="tools">
+  <button class="tool-btn" onclick="toggleNotes()">📝 笔记</button>
+  <button class="tool-btn" onclick="erase()">🧹 擦除</button>
+  <button class="tool-btn" onclick="undo()">↩️ 撤销</button>
+  <button class="tool-btn" onclick="useHint()">💡 提示</button>
+  <button class="tool-btn" onclick="newGame()">🔄 新局</button>
+</div>
+<div class="diff-btns">
+  <button class="diff-btn active" onclick="setDiff(0,this)">简单</button>
+  <button class="diff-btn" onclick="setDiff(1,this)">中等</button>
+  <button class="diff-btn" onclick="setDiff(2,this)">困难</button>
+  <button class="diff-btn" onclick="setDiff(3,this)">专家</button>
+</div>
+
+<script>
+const boardEl=document.getElementById('board');
+let grid,solution,selected,notesMode,notes,errors,hintsLeft,diff,startTime,timerInterval,history;
+const DIFFS=[{name:'简单',remove:35},{name:'中等',remove:45},{name:'困难',remove:52},{name:'专家',remove:58}];
+
+function generateSudoku(){
+  // Generate a solved sudoku
+  solution=Array.from({length:9},()=>Array(9).fill(0));
+  fillBoard(solution);
+  grid=solution.map(r=>[...r]);
+  notes=Array.from({length:9},()=>Array.from({length:9},()=>new Set()));
+  // Remove cells based on difficulty
+  const remove=DIFFS[diff].remove;
+  const cells=[];
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++)cells.push([r,c]);
+  for(let i=cells.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[cells[i],cells[j]]=[cells[j],cells[i]];}
+  for(let i=0;i<remove;i++){
+    const[r,c]=cells[i];
+    grid[r][c]=0;
+  }
+}
+
+function fillBoard(board){
+  const nums=[1,2,3,4,5,6,7,8,9];
+  for(let r=0;r<9;r++){
+    for(let c=0;c<9;c++){
+      if(board[r][c]===0){
+        const shuffled=[...nums].sort(()=>Math.random()-.5);
+        for(const n of shuffled){
+          if(isValid(board,r,c,n)){
+            board[r][c]=n;
+            if(fillBoard(board))return true;
+            board[r][c]=0;
+          }
+        }
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function isValid(board,row,col,num){
+  for(let c=0;c<9;c++)if(c!==col&&board[row][c]===num)return false;
+  for(let r=0;r<9;r++)if(r!==row&&board[r][col]===num)return false;
+  const br=Math.floor(row/3)*3,bc=Math.floor(col/3)*3;
+  for(let r=br;r<br+3;r++)for(let c=bc;c<bc+3;c++){
+    if((r!==row||c!==col)&&board[r][c]===num)return false;
+  }
+  return true;
+}
+
+function newGame(){
+  selected=null;notesMode=false;errors=0;hints_left=3;history=[];
+  document.getElementById('errors').textContent=0;
+  document.getElementById('hints').textContent=3;
+  generateSudoku();
+  renderBoard();renderNumpad();
+  startTime=Date.now();
+  if(timerInterval)clearInterval(timerInterval);
+  timerInterval=setInterval(updateTimer,1000);
+}
+
+function updateTimer(){
+  const sec=Math.floor((Date.now()-startTime)/1000);
+  document.getElementById('timer').textContent=`${Math.floor(sec/60)}:${(sec%60).toString().padStart(2,'0')}`;
+}
+
+function renderBoard(){
+  boardEl.innerHTML='';
+  for(let r=0;r<9;r++){
+    for(let c=0;c<9;c++){
+      const cell=document.createElement('div');
+      cell.className='cell';
+      if(c%3===2&&c<8)cell.classList.add('border-right');
+      if(r%3===2&&r<8)cell.classList.add('border-bottom');
+      if(grid[r][c]!==0){
+        cell.textContent=grid[r][c];
+        cell.classList.add(solution[r][c]===grid[r][c]&&grid[r][c]!==0?'given':'user');
+      }else if(notes[r][c].size>0){
+        const notesDiv=document.createElement('div');
+        notesDiv.className='notes';
+        for(let n=1;n<=9;n++){
+          const s=document.createElement('span');
+          s.textContent=notes[r][c].has(n)?n:'';
+          notesDiv.appendChild(s);
+        }
+        cell.appendChild(notesDiv);
+      }
+      if(selected&&selected[0]===r&&selected[1]===c)cell.classList.add('selected');
+      if(selected){
+        const[sr,sc]=selected;
+        const selNum=grid[sr][sc];
+        if(grid[r][c]===selNum&&selNum!==0)cell.classList.add('same-num');
+        else if(r===sr||c===sc||(Math.floor(r/3)===Math.floor(sr/3)&&Math.floor(c/3)===Math.floor(sc/3)))cell.classList.add('same-row-col');
+      }
+      cell.onclick=()=>selectCell(r,c);
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function renderNumpad(){
+  const pad=document.getElementById('numpad');
+  pad.innerHTML='';
+  for(let n=1;n<=9;n++){
+    const btn=document.createElement('button');
+    btn.className='num-btn';
+    btn.textContent=n;
+    // Count remaining
+    let count=0;
+    for(let r=0;r<9;r++)for(let c=0;c<9;c++)if(grid[r][c]===n)count++;
+    if(count>=9)btn.classList.add('done');
+    btn.onclick=()=>inputNumber(n);
+    pad.appendChild(btn);
+  }
+}
+
+function selectCell(r,c){
+  selected=[r,c];
+  renderBoard();
+}
+
+function inputNumber(n){
+  if(!selected)return;
+  const[r,c]=selected;
+  if(solution[r][c]!==0&&grid[r][c]===solution[r][c])return; // given cell
+
+  if(notesMode){
+    if(grid[r][c]!==0)return;
+    if(notes[r][c].has(n))notes[r][c].delete(n);else notes[r][c].add(n);
+  }else{
+    history.push({r,c,prev:grid[r][c],prevNotes:new Set(notes[r][c])});
+    if(n===solution[r][c]){
+      grid[r][c]=n;
+      notes[r][c].clear();
+      // Remove from notes in same row/col/box
+      for(let i=0;i<9;i++){notes[r][i].delete(n);notes[i][c].delete(n);}
+      const br=Math.floor(r/3)*3,bc=Math.floor(c/3)*3;
+      for(let dr=0;dr<3;dr++)for(let dc=0;dc<3;dc++)notes[br+dr][bc+dc].delete(n);
+    }else{
+      grid[r][c]=n;
+      errors++;
+      document.getElementById('errors').textContent=errors;
+    }
+  }
+  renderBoard();renderNumpad();
+  checkWin();
+}
+
+function erase(){
+  if(!selected)return;
+  const[r,c]=selected;
+  if(solution[r][c]===grid[r][c]&&grid[r][c]!==0)return;
+  history.push({r,c,prev:grid[r][c],prevNotes:new Set(notes[r][c])});
+  grid[r][c]=0;notes[r][c].clear();
+  renderBoard();renderNumpad();
+}
+
+function undo(){
+  if(!history.length)return;
+  const h=history.pop();
+  grid[h.r][h.c]=h.prev;notes[h.r][h.c]=h.prevNotes;
+  renderBoard();renderNumpad();
+}
+
+function useHint(){
+  if(hints_left<=0)return;
+  // Find an empty cell
+  const empty=[];
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++)if(grid[r][c]===0||grid[r][c]!==solution[r][c])empty.push([r,c]);
+  if(!empty.length)return;
+  const[r,c]=empty[Math.floor(Math.random()*empty.length)];
+  grid[r][c]=solution[r][c];notes[r][c].clear();
+  hints_left--;
+  document.getElementById('hints').textContent=hints_left;
+  selected=[r,c];
+  renderBoard();renderNumpad();
+  // Highlight
+  setTimeout(()=>{
+    const cells=boardEl.children;
+    cells[r*9+c].classList.add('hint-cell');
+  },50);
+  checkWin();
+}
+
+function toggleNotes(){notesMode=!notesMode;}
+
+function checkWin(){
+  for(let r=0;r<9;r++)for(let c=0;c<9;c++){
+    if(grid[r][c]!==solution[r][c])return;
+  }
+  clearInterval(timerInterval);
+  setTimeout(()=>{
+    alert('🎉 恭喜完成数独！');
+  },100);
+}
+
+function setDiff(d,el){
+  diff=d;
+  document.querySelectorAll('.diff-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  newGame();
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.key>='1'&&e.key<='9')inputNumber(parseInt(e.key));
+  if(e.code==='Backspace')erase();
+  if(e.code==='KeyN')toggleNotes();
+  if(e.code==='KeyZ'&&e.ctrlKey)undo();
+  if(selected){
+    const[r,c]=selected;
+    if(e.code==='ArrowUp'&&r>0)selectCell(r-1,c);
+    if(e.code==='ArrowDown'&&r<8)selectCell(r+1,c);
+    if(e.code==='ArrowLeft'&&c>0)selectCell(r,c-1);
+    if(e.code==='ArrowRight'&&c<8)selectCell(r,c+1);
+  }
+});
+
+diff=0;
+newGame();
+</script>
+</body>
+</html>

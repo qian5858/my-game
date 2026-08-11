@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>极速跑酷</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:linear-gradient(180deg,#0a0a1a,#1a1a2e);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden}
+.header{display:flex;gap:12px;margin-bottom:6px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+.header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
+.header .val{font-weight:bold;color:#feca57;min-width:28px;text-align:center}
+.canvas-wrap{border:2px solid #2a2a4a;border-radius:10px;overflow:hidden;box-shadow:0 0 30px rgba(72,219,251,.08);position:relative}
+canvas{display:block}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
+.overlay h2{font-size:1.6rem;margin-bottom:8px;color:#feca57}
+.overlay p{color:#aab;margin-bottom:12px}
+.overlay .btn{padding:10px 28px;border:none;border-radius:10px;font-size:1rem;font-weight:bold;cursor:pointer;background:linear-gradient(135deg,#48dbfb,#0abde3);color:#0a1628}
+.tip{margin-top:4px;font-size:.7rem;color:#445}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="item">🏅 距离 <span class="val" id="dist">0</span></div>
+  <div class="item">💰 金币 <span class="val" id="coins">0</span></div>
+  <div class="item">🏆 最远 <span class="val" id="best">0</span></div>
+  <div class="item">⚡ 速度 <span class="val" id="speed">1</span></div>
+</div>
+<div class="canvas-wrap">
+  <canvas id="cv" width="600" height="350"></canvas>
+  <div class="overlay" id="overlay">
+    <h2 id="ov-title">极速跑酷</h2>
+    <p id="ov-msg">跳跃躲避障碍，收集金币！</p>
+    <button class="btn" onclick="startGame()">开始奔跑</button>
+  </div>
+</div>
+<div class="tip">空格/↑/点击 跳跃 · 双击二段跳 · ↓ 滑铲</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const W=600,H=350;
+const GROUND_Y=H-50;
+const GRAVITY=0.6;
+
+let player,obstacles,coins,particles,distance,coinCount,bestDist,gameSpeed,gameRunning,gameOver;
+let jumpCount,maxJumps=2;
+let frame=0;
+
+bestDist=parseInt(localStorage.getItem('runner_best')||'0');
+document.getElementById('best').textContent=bestDist;
+
+function startGame(){
+  player={x:80,y:GROUND_Y-30,vy:0,w:24,h:30,onGround:true,sliding:false,slideTimer:0,invincible:0};
+  obstacles=[];coins=[];particles=[];
+  distance=0;coinCount=0;gameSpeed=4;gameRunning=true;gameOver=false;jumpCount=0;frame=0;
+  document.getElementById('overlay').style.display='none';
+  updateUI();
+}
+
+function jump(){
+  if(!gameRunning){if(gameOver)startGame();return;}
+  if(jumpCount<maxJumps){
+    player.vy=-11-(jumpCount===1?1:0);
+    player.onGround=false;
+    jumpCount++;
+    // Trail particles
+    for(let i=0;i<4;i++){
+      particles.push({x:player.x,y:player.y+player.h,vx:-Math.random()*2,vy:Math.random()*2,life:15,color:'#48dbfb',r:2+Math.random()*2});
+    }
+  }
+}
+
+function slide(){
+  if(!gameRunning)return;
+  if(player.onGround&&!player.sliding){
+    player.sliding=true;player.slideTimer=30;
+    player.h=15;player.y=GROUND_Y-15;
+  }
+}
+
+function spawnObstacle(){
+  const types=['spike','block','bird','double'];
+  const type=types[Math.floor(Math.random()*types.length)];
+  let obs;
+  if(type==='spike'){
+    obs={x:W+20,y:GROUND_Y-20,w:20,h:20,type:'spike'};
+  }else if(type==='block'){
+    obs={x:W+20,y:GROUND_Y-35,w:30,h:35,type:'block'};
+  }else if(type==='bird'){
+    obs={x:W+20,y:GROUND_Y-60-Math.random()*30,w:25,h:18,type:'bird',wingPhase:0};
+  }else{
+    obs={x:W+20,y:GROUND_Y-20,w:20,h:20,type:'spike'};
+    obstacles.push(obs);
+    obs={x:W+60,y:GROUND_Y-55-Math.random()*20,w:25,h:18,type:'bird',wingPhase:0};
+  }
+  obstacles.push(obs);
+}
+
+function spawnCoin(){
+  const y=GROUND_Y-40-Math.random()*80;
+  for(let i=0;i<3+Math.floor(Math.random()*4);i++){
+    coins.push({x:W+20+i*25,y:y+Math.sin(i*0.5)*15,r:8,collected:false});
+  }
+}
+
+function updateUI(){
+  document.getElementById('dist').textContent=Math.floor(distance);
+  document.getElementById('coins').textContent=coinCount;
+  document.getElementById('speed').textContent=Math.floor(gameSpeed/4*10)/10;
+}
+
+function checkCollision(a,b){
+  return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+}
+
+function die(){
+  gameRunning=false;gameOver=true;
+  if(distance>bestDist){bestDist=Math.floor(distance);localStorage.setItem('runner_best',bestDist);document.getElementById('best').textContent=bestDist;}
+  document.getElementById('ov-title').textContent='Game Over';
+  document.getElementById('ov-msg').textContent=`距离: ${Math.floor(distance)}m · 金币: ${coinCount}`;
+  document.getElementById('overlay').style.display='flex';
+  // Death particles
+  for(let i=0;i<15;i++){
+    const angle=Math.random()*Math.PI*2;
+    particles.push({x:player.x+player.w/2,y:player.y+player.h/2,vx:Math.cos(angle)*4,vy:Math.sin(angle)*4,life:30,color:'#ff6b6b',r:3+Math.random()*3});
+  }
+}
+
+function update(){
+  if(!gameRunning)return;
+  frame++;
+  distance+=gameSpeed*0.05;
+  gameSpeed=4+distance/200;
+
+  // Player physics
+  player.vy+=GRAVITY;
+  player.y+=player.vy;
+  if(player.y+player.h>=GROUND_Y){
+    player.y=GROUND_Y-player.h;player.vy=0;player.onGround=true;jumpCount=0;
+  }
+
+  // Slide
+  if(player.sliding){
+    player.slideTimer--;
+    if(player.slideTimer<=0){player.sliding=false;player.h=30;player.y=GROUND_Y-30;}
+  }
+
+  // Invincible
+  if(player.invincible>0)player.invincible--;
+
+  // Spawn
+  if(frame%Math.max(40,Math.floor(100-gameSpeed*3))===0)spawnObstacle();
+  if(frame%80===0)spawnCoin();
+
+  // Obstacles
+  for(let i=obstacles.length-1;i>=0;i--){
+    const o=obstacles[i];
+    o.x-=gameSpeed;
+    if(o.type==='bird')o.wingPhase+=0.15;
+    if(o.x+o.w<-20){obstacles.splice(i,1);continue;}
+    // Collision
+    if(player.invincible<=0){
+      const pb={x:player.x+3,y:player.y+3,w:player.w-6,h:player.h-6};
+      if(checkCollision(pb,o)){
+        if(o.type==='bird'&&player.sliding){/* dodge */}
+        else die();
+      }
+    }
+  }
+
+  // Coins
+  for(let i=coins.length-1;i>=0;i--){
+    const c=coins[i];
+    c.x-=gameSpeed;
+    if(c.x<-20){coins.splice(i,1);continue;}
+    if(!c.collected&&Math.hypot(player.x+player.w/2-c.x,player.y+player.h/2-c.y)<player.w/2+c.r){
+      c.collected=true;coinCount++;
+      for(let j=0;j<4;j++){
+        particles.push({x:c.x,y:c.y,vx:Math.random()*3-1.5,vy:-Math.random()*3,life:15,color:'#feca57',r:2+Math.random()*2});
+      }
+      coins.splice(i,1);
+    }
+  }
+
+  // Particles
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx;p.y+=p.vy;p.vy+=0.1;p.life--;
+    if(p.life<=0)particles.splice(i,1);
+  }
+
+  // Running particles
+  if(player.onGround&&frame%5===0){
+    particles.push({x:player.x,y:GROUND_Y,vx:-Math.random()*2,vy:-Math.random(),life:10,color:'rgba(200,200,200,.5)',r:1.5+Math.random()*1.5});
+  }
+
+  updateUI();
+}
+
+function drawBg(){
+  // Sky gradient
+  const grad=ctx.createLinearGradient(0,0,0,GROUND_Y);
+  grad.addColorStop(0,'#1a1a3e');
+  grad.addColorStop(1,'#2a2a5e');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,W,GROUND_Y);
+
+  // Stars
+  ctx.fillStyle='rgba(255,255,255,.3)';
+  for(let i=0;i<20;i++){
+    const x=(i*37+frame*0.2)%W;
+    const y=20+Math.sin(i*1.7)*40+i*3;
+    ctx.beginPath();ctx.arc(x,y,0.8,0,Math.PI*2);ctx.fill();
+  }
+
+  // Mountains (parallax)
+  ctx.fillStyle='#1a1a3a';
+  for(let i=0;i<5;i++){
+    const mx=(i*160-frame*0.3%160+W+160)%(W+320)-160;
+    ctx.beginPath();ctx.moveTo(mx,GROUND_Y);ctx.lineTo(mx+80,GROUND_Y-80-i*10);ctx.lineTo(mx+160,GROUND_Y);ctx.fill();
+  }
+
+  // Buildings (parallax)
+  ctx.fillStyle='#22224a';
+  for(let i=0;i<8;i++){
+    const bx=(i*100-frame*0.8%100+W+100)%(W+200)-100;
+    const bh=40+Math.sin(i*2.3)*25;
+    ctx.fillRect(bx,GROUND_Y-bh,30,bh);
+    // Windows
+    ctx.fillStyle='rgba(255,200,50,.3)';
+    for(let wy=GROUND_Y-bh+5;wy<GROUND_Y-5;wy+=12){
+      for(let wx=bx+5;wx<bx+25;wx+=10){
+        if(Math.random()>.3)ctx.fillRect(wx,wy,5,6);
+      }
+    }
+    ctx.fillStyle='#22224a';
+  }
+
+  // Ground
+  ctx.fillStyle='#333355';ctx.fillRect(0,GROUND_Y,W,H-GROUND_Y);
+  ctx.fillStyle='#444466';ctx.fillRect(0,GROUND_Y,W,3);
+  // Ground lines
+  ctx.strokeStyle='rgba(255,255,255,.05)';ctx.lineWidth=1;
+  for(let x=-frame*gameSpeed%30;x<W;x+=30){
+    ctx.beginPath();ctx.moveTo(x,GROUND_Y+3);ctx.lineTo(x,H);ctx.stroke();
+  }
+}
+
+function drawPlayer(){
+  if(player.invincible>0&&frame%4<2)return;
+  const x=player.x,y=player.y;
+  ctx.save();
+  if(player.sliding){
+    // Sliding pose
+    ctx.fillStyle='#48dbfb';
+    ctx.fillRect(x,y,player.w,player.h);
+    ctx.fillStyle='rgba(255,255,255,.3)';
+    ctx.fillRect(x+2,y+2,player.w-4,3);
+  }else{
+    // Body
+    ctx.fillStyle='#48dbfb';
+    ctx.fillRect(x+2,y+10,player.w-4,player.h-10);
+    // Head
+    ctx.fillStyle='#feca57';
+    ctx.beginPath();ctx.arc(x+player.w/2,y+7,8,0,Math.PI*2);ctx.fill();
+    // Eyes
+    ctx.fillStyle='#222';
+    ctx.beginPath();ctx.arc(x+player.w/2+3,y+6,2,0,Math.PI*2);ctx.fill();
+    // Legs (running animation)
+    const legPhase=frame*0.3;
+    ctx.fillStyle='#48dbfb';
+    if(player.onGround){
+      ctx.fillRect(x+4,y+player.h-2+Math.sin(legPhase)*3,5,4);
+      ctx.fillRect(x+player.w-9,y+player.h-2+Math.sin(legPhase+Math.PI)*3,5,4);
+    }
+    // Trail
+    ctx.fillStyle='rgba(72,219,251,.15)';
+    ctx.fillRect(x-8,y+5,8,player.h-10);
+    ctx.fillStyle='rgba(72,219,251,.08)';
+    ctx.fillRect(x-16,y+8,8,player.h-16);
+  }
+  ctx.restore();
+}
+
+function draw(){
+  ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);
+  drawBg();
+
+  // Obstacles
+  obstacles.forEach(o=>{
+    if(o.type==='spike'){
+      ctx.fillStyle='#e74c3c';
+      ctx.beginPath();
+      ctx.moveTo(o.x,o.y+o.h);ctx.lineTo(o.x+o.w/2,o.y);ctx.lineTo(o.x+o.w,o.y+o.h);
+      ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.2)';
+      ctx.beginPath();ctx.moveTo(o.x+o.w/2,o.y);ctx.lineTo(o.x+o.w/2+3,o.y+o.h*0.6);ctx.lineTo(o.x+o.w/2-3,o.y+o.h*0.6);ctx.fill();
+    }else if(o.type==='block'){
+      ctx.fillStyle='#8e44ad';
+      ctx.fillRect(o.x,o.y,o.w,o.h);
+      ctx.fillStyle='rgba(255,255,255,.15)';ctx.fillRect(o.x+2,o.y+2,o.w-4,4);
+      ctx.strokeStyle='rgba(255,255,255,.1)';ctx.strokeRect(o.x,o.y,o.w,o.h);
+    }else if(o.type==='bird'){
+      ctx.fillStyle='#e67e22';
+      ctx.fillRect(o.x+5,o.y+5,o.w-10,o.h-5);
+      // Wings
+      const wingY=Math.sin(o.wingPhase)*6;
+      ctx.fillStyle='#d35400';
+      ctx.beginPath();ctx.moveTo(o.x,o.y+o.h/2);ctx.lineTo(o.x+8,o.y+wingY);ctx.lineTo(o.x+12,o.y+o.h/2);ctx.fill();
+      ctx.beginPath();ctx.moveTo(o.x+o.w-12,o.y+o.h/2);ctx.lineTo(o.x+o.w-8,o.y+wingY);ctx.lineTo(o.x+o.w,o.y+o.h/2);ctx.fill();
+      // Eye
+      ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(o.x+o.w-6,o.y+8,2,0,Math.PI*2);ctx.fill();
+    }
+  });
+
+  // Coins
+  coins.forEach(c=>{
+    if(c.collected)return;
+    const pulse=Math.sin(frame*0.1+c.x*0.1)*1;
+    ctx.fillStyle='#feca57';
+    ctx.beginPath();ctx.arc(c.x,c.y,c.r+pulse,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.3)';
+    ctx.beginPath();ctx.arc(c.x-2,c.y-2,c.r*0.4,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='#f39c12';ctx.lineWidth=1.5;
+    ctx.beginPath();ctx.arc(c.x,c.y,c.r+pulse,0,Math.PI*2);ctx.stroke();
+  });
+
+  drawPlayer();
+
+  // Particles
+  particles.forEach(p=>{
+    ctx.globalAlpha=p.life/20;ctx.fillStyle=p.color;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fill();
+    ctx.globalAlpha=1;
+  });
+
+  // Distance marker
+  ctx.font='bold 14px sans-serif';ctx.textAlign='right';ctx.fillStyle='rgba(255,255,255,.3)';
+  ctx.fillText(`${Math.floor(distance)}m`,W-10,20);
+}
+
+function gameLoop(){
+  update();draw();
+  requestAnimationFrame(gameLoop);
+}
+
+// Input
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'||e.code==='ArrowUp'){e.preventDefault();jump();}
+  if(e.code==='ArrowDown'){e.preventDefault();slide();}
+});
+cv.addEventListener('pointerdown',e=>{e.preventDefault();jump();});
+
+gameRunning=false;gameOver=true;
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

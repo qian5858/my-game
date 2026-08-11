@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>五子棋</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:linear-gradient(180deg,#1a1a0a,#2a2a1a);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden}
+.header{display:flex;gap:12px;margin-bottom:6px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
+.header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
+.header .val{font-weight:bold;color:#feca57;min-width:24px;text-align:center}
+.board-wrap{position:relative}
+canvas{display:block;border-radius:8px;cursor:pointer;box-shadow:0 0 30px rgba(200,180,100,.1)}
+.tools{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;justify-content:center}
+.tool-btn{padding:6px 14px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.05);color:#aab;cursor:pointer;font-size:.8rem;transition:all .2s;font-family:inherit}
+.tool-btn:hover{background:rgba(255,255,255,.12)}
+.diff-btns{display:flex;gap:6px;margin-top:4px}
+.diff-btn{padding:5px 12px;border:1px solid rgba(255,255,255,.15);border-radius:6px;background:rgba(255,255,255,.05);color:#aab;cursor:pointer;font-size:.75rem;transition:all .2s;font-family:inherit}
+.diff-btn:hover{background:rgba(255,255,255,.12)}
+.diff-btn.active{border-color:#feca57;background:rgba(254,202,87,.1);color:#feca57}
+.overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10;border-radius:8px}
+.overlay h2{font-size:1.5rem;margin-bottom:8px}
+.overlay p{color:#aab;margin-bottom:12px}
+.overlay .btn{padding:10px 28px;border:none;border-radius:10px;font-size:1rem;font-weight:bold;cursor:pointer;background:linear-gradient(135deg,#48dbfb,#0abde3);color:#0a1628}
+.tip{margin-top:4px;font-size:.7rem;color:#665}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="item">⚫ 你 (黑棋)</div>
+  <div class="item">⚪ AI (白棋)</div>
+  <div class="item">📊 <span class="val" id="status">你的回合</span></div>
+</div>
+<div class="board-wrap">
+  <canvas id="cv" width="480" height="480"></canvas>
+  <div class="overlay" id="overlay" style="display:none">
+    <h2 id="ov-title">游戏结束</h2>
+    <p id="ov-msg"></p>
+    <button class="btn" onclick="newGame()">再来一局</button>
+  </div>
+</div>
+<div class="tools">
+  <button class="tool-btn" onclick="undo()">↩️ 悔棋</button>
+  <button class="tool-btn" onclick="newGame()">🔄 新局</button>
+</div>
+<div class="diff-btns">
+  <button class="diff-btn active" onclick="setDiff(0,this)">新手</button>
+  <button class="diff-btn" onclick="setDiff(1,this)">普通</button>
+  <button class="diff-btn" onclick="setDiff(2,this)">高手</button>
+</div>
+<div class="tip">点击落子 · 五子连珠获胜</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+const SIZE=15,CELL=32,PAD=16;
+const W=PAD*2+CELL*(SIZE-1);
+cv.width=W;cv.height=W;
+
+let board,history,gameOver,aiDiff,playerColor=1,aiColor=2;
+
+function newGame(){
+  board=Array.from({length:SIZE},()=>Array(SIZE).fill(0));
+  history=[];gameOver=false;
+  document.getElementById('overlay').style.display='none';
+  document.getElementById('status').textContent='你的回合';
+  draw();
+}
+
+function setDiff(d,el){
+  aiDiff=d;
+  document.querySelectorAll('.diff-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+  newGame();
+}
+
+function posToXY(row,col){return{x:PAD+col*CELL,y:PAD+row*CELL};}
+function xyToPos(mx,my){
+  const col=Math.round((mx-PAD)/CELL);
+  const row=Math.round((my-PAD)/CELL);
+  if(row<0||row>=SIZE||col<0||col>=SIZE)return null;
+  const{x,y}=posToXY(row,col);
+  if(Math.hypot(mx-x,my-y)>CELL/2)return null;
+  return{row,col};
+}
+
+function checkWin(board,r,c,color){
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  for(const[dr,dc]of dirs){
+    let count=1;
+    for(let i=1;i<5;i++){const nr=r+dr*i,nc=c+dc*i;if(nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE&&board[nr][nc]===color)count++;else break;}
+    for(let i=1;i<5;i++){const nr=r-dr*i,nc=c-dc*i;if(nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE&&board[nr][nc]===color)count++;else break;}
+    if(count>=5)return true;
+  }
+  return false;
+}
+
+function placeStone(r,c,color){
+  board[r][c]=color;
+  history.push({r,c,color});
+  if(checkWin(board,r,c,color)){
+    gameOver=true;
+    const isPlayer=color===playerColor;
+    document.getElementById('ov-title').textContent=isPlayer?'🎉 你赢了！':'😔 AI赢了';
+    document.getElementById('ov-msg').textContent=isPlayer?'恭喜，你战胜了AI！':'再接再厉，下次一定赢！';
+    document.getElementById('overlay').style.display='flex';
+    document.getElementById('status').textContent=isPlayer?'你赢了！':'AI赢了';
+  }else if(history.length>=SIZE*SIZE){
+    gameOver=true;
+    document.getElementById('ov-title').textContent='平局';
+    document.getElementById('ov-msg').textContent='棋盘已满';
+    document.getElementById('overlay').style.display='flex';
+    document.getElementById('status').textContent='平局';
+  }
+}
+
+// AI with scoring
+function aiMove(){
+  if(gameOver)return;
+  const depth=aiDiff===0?1:aiDiff===1?2:3;
+  let bestScore=-Infinity,bestR=7,bestC=7;
+
+  // Get candidate moves (near existing stones)
+  const candidates=getCandidates(board);
+  if(candidates.length===0){placeStone(7,7,aiColor);return;}
+
+  for(const{r,c}of candidates){
+    // Score this position
+    let score=evaluatePosition(board,r,c,aiColor)*1.1+evaluatePosition(board,r,c,playerColor);
+
+    // Look ahead for immediate wins/blocks
+    board[r][c]=aiColor;
+    if(checkWin(board,r,c,aiColor))score+=100000;
+    board[r][c]=0;
+
+    board[r][c]=playerColor;
+    if(checkWin(board,r,c,playerColor))score+=50000;
+    board[r][c]=0;
+
+    // Deeper analysis for harder difficulties
+    if(depth>=2){
+      score+=lookAhead(board,r,c,aiColor,1)*10;
+    }
+    if(depth>=3){
+      score+=lookAhead(board,r,c,aiColor,2)*5;
+    }
+
+    // Add randomness for easier difficulties
+    if(aiDiff===0)score+=Math.random()*100;
+    else if(aiDiff===1)score+=Math.random()*20;
+
+    if(score>bestScore){bestScore=score;bestR=r;bestC=c;}
+  }
+
+  placeStone(bestR,bestC,aiColor);
+  document.getElementById('status').textContent='你的回合';
+}
+
+function getCandidates(board){
+  const set=new Set();
+  const range=2;
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    if(board[r][c]!==0){
+      for(let dr=-range;dr<=range;dr++)for(let dc=-range;dc<=range;dc++){
+        const nr=r+dr,nc=c+dc;
+        if(nr>=0&&nr<SIZE&&nc>=0&&nc<SIZE&&board[nr][nc]===0)set.add(`${nr},${nc}`);
+      }
+    }
+  }
+  return[...set].map(s=>{const[r,c]=s.split(',').map(Number);return{r,c};});
+}
+
+function evaluatePosition(board,r,c,color){
+  const dirs=[[0,1],[1,0],[1,1],[1,-1]];
+  let totalScore=0;
+
+  for(const[dr,dc]of dirs){
+    let count=1,block=0,empty=0;
+    // Forward
+    for(let i=1;i<=4;i++){
+      const nr=r+dr*i,nc=c+dc*i;
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE){block++;break;}
+      if(board[nr][nc]===color)count++;
+      else if(board[nr][nc]===0){empty++;break;}
+      else{block++;break;}
+    }
+    // Backward
+    for(let i=1;i<=4;i++){
+      const nr=r-dr*i,nc=c-dc*i;
+      if(nr<0||nr>=SIZE||nc<0||nc>=SIZE){block++;break;}
+      if(board[nr][nc]===color)count++;
+      else if(board[nr][nc]===0){empty++;break;}
+      else{block++;break;}
+    }
+
+    if(count>=5)totalScore+=100000;
+    else if(count===4&&block===0)totalScore+=10000;
+    else if(count===4&&block===1)totalScore+=5000;
+    else if(count===3&&block===0)totalScore+=1000;
+    else if(count===3&&block===1)totalScore+=200;
+    else if(count===2&&block===0)totalScore+=100;
+    else if(count===2&&block===1)totalScore+=30;
+    else if(count===1&&block===0)totalScore+=10;
+  }
+
+  // Center bonus
+  const centerDist=Math.abs(r-7)+Math.abs(c-7);
+  totalScore+=Math.max(0,14-centerDist)*2;
+
+  return totalScore;
+}
+
+function lookAhead(board,r,c,color,depth){
+  if(depth<=0)return 0;
+  board[r][c]=color;
+  let score=0;
+  const candidates=getCandidates(board).slice(0,5);
+  for(const{r:cr,c:cc}of candidates){
+    score+=evaluatePosition(board,cr,cc,color);
+  }
+  board[r][c]=0;
+  return score;
+}
+
+function undo(){
+  if(history.length<2||gameOver)return;
+  // Remove AI move and player move
+  for(let i=0;i<2;i++){
+    const last=history.pop();
+    if(last)board[last.r][last.c]=0;
+  }
+  document.getElementById('status').textContent='你的回合';
+  draw();
+}
+
+// Drawing
+function draw(){
+  // Board background (wood texture)
+  const grad=ctx.createLinearGradient(0,0,W,W);
+  grad.addColorStop(0,'#c8a96e');grad.addColorStop(0.5,'#d4b87a');grad.addColorStop(1,'#c0a060');
+  ctx.fillStyle=grad;ctx.fillRect(0,0,W,W);
+
+  // Grid lines
+  ctx.strokeStyle='rgba(0,0,0,.4)';ctx.lineWidth=1;
+  for(let i=0;i<SIZE;i++){
+    const p=PAD+i*CELL;
+    ctx.beginPath();ctx.moveTo(PAD,p);ctx.lineTo(PAD+(SIZE-1)*CELL,p);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(p,PAD);ctx.lineTo(p,PAD+(SIZE-1)*CELL);ctx.stroke();
+  }
+
+  // Star points
+  const stars=[[3,3],[3,11],[7,7],[11,3],[11,11]];
+  ctx.fillStyle='rgba(0,0,0,.5)';
+  for(const[r,c]of stars){
+    const{x,y}=posToXY(r,c);
+    ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);ctx.fill();
+  }
+
+  // Stones
+  for(let r=0;r<SIZE;r++)for(let c=0;c<SIZE;c++){
+    if(board[r][c]===0)continue;
+    const{x,y}=posToXY(r,c);
+    const isBlack=board[r][c]===1;
+
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,.2)';
+    ctx.beginPath();ctx.arc(x+2,y+2,CELL/2-3,0,Math.PI*2);ctx.fill();
+
+    // Stone
+    const stoneGrad=ctx.createRadialGradient(x-3,y-3,2,x,y,CELL/2-3);
+    if(isBlack){
+      stoneGrad.addColorStop(0,'#555');stoneGrad.addColorStop(1,'#111');
+    }else{
+      stoneGrad.addColorStop(0,'#fff');stoneGrad.addColorStop(1,'#ccc');
+    }
+    ctx.fillStyle=stoneGrad;
+    ctx.beginPath();ctx.arc(x,y,CELL/2-3,0,Math.PI*2);ctx.fill();
+
+    // Highlight
+    ctx.fillStyle=isBlack?'rgba(255,255,255,.1)':'rgba(255,255,255,.5)';
+    ctx.beginPath();ctx.arc(x-3,y-3,4,0,Math.PI*2);ctx.fill();
+  }
+
+  // Last move indicator
+  if(history.length>0){
+    const last=history[history.length-1];
+    const{x,y}=posToXY(last.r,last.c);
+    ctx.strokeStyle=last.color===1?'#48dbfb':'#ff6b6b';
+    ctx.lineWidth=2;
+    ctx.beginPath();ctx.arc(x,y,CELL/2-1,0,Math.PI*2);ctx.stroke();
+  }
+}
+
+cv.addEventListener('click',e=>{
+  if(gameOver)return;
+  const rect=cv.getBoundingClientRect();
+  const scaleX=W/rect.width,scaleY=W/rect.height;
+  const mx=(e.clientX-rect.left)*scaleX;
+  const my=(e.clientY-rect.top)*scaleY;
+  const pos=xyToPos(mx,my);
+  if(!pos||board[pos.row][pos.col]!==0)return;
+
+  placeStone(pos.row,pos.col,playerColor);
+  draw();
+  if(!gameOver){
+    document.getElementById('status').textContent='AI思考中...';
+    setTimeout(()=>{aiMove();draw();},200);
+  }
+});
+
+aiDiff=0;
+newGame();
+</script>
+</body>
+</html>

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跳一跳</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(180deg, #1a1a2e, #16213e);
+    min-height: 100vh; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: 'Segoe UI', sans-serif;
+    color: #e0e0e0; user-select: none; overflow: hidden;
+  }
+  .header {
+    display: flex; align-items: center; gap: 24px;
+    margin-bottom: 10px; font-size: 1.05rem;
+  }
+  .header .item {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(255,255,255,.06); padding: 5px 16px; border-radius: 20px;
+  }
+  .header .val { font-weight: bold; color: #feca57; min-width: 28px; text-align: center; }
+  .canvas-wrap {
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 0 40px rgba(100,100,255,.12);
+    border: 2px solid rgba(100,100,255,.12);
+  }
+  canvas { display: block; cursor: pointer; }
+  .overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; backdrop-filter: blur(4px);
+  }
+  .overlay.hidden { display: none; }
+  .modal {
+    background: linear-gradient(135deg, #1a1a3e, #2d2b55); padding: 36px 52px;
+    border-radius: 20px; text-align: center;
+    box-shadow: 0 0 50px rgba(100,100,255,.2);
+  }
+  .modal h2 { font-size: 1.8rem; margin-bottom: 8px; color: #feca57; }
+  .modal p { margin-bottom: 18px; color: #aaa; font-size: 1.05rem; }
+  .modal button {
+    padding: 10px 36px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #feca57, #ff6b6b);
+    color: #1a1a3e; font-size: 1rem; font-weight: bold;
+    cursor: pointer; transition: transform .2s;
+  }
+  .modal button:hover { transform: scale(1.06); }
+  .tip { color: #556; font-size: .78rem; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="item">🏆 分数 <span class="val" id="score">0</span></div>
+  <div class="item">🔥 连中 <span class="val" id="combo">0</span></div>
+  <div class="item">⭐ 最高 <span class="val" id="best">0</span></div>
+</div>
+
+<div class="canvas-wrap">
+  <canvas id="game" width="600" height="500"></canvas>
+</div>
+<p class="tip">按住蓄力，松手跳跃 · 落在中心加分 · 连续命中中心combo翻倍</p>
+
+<div class="overlay hidden" id="overlay">
+  <div class="modal">
+    <h2 id="r-title">游戏结束</h2>
+    <p id="r-msg"></p>
+    <button onclick="restartGame()">再来一局</button>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = 600, H = 500;
+
+/* ========== 音效 ========== */
+let audioCtx;
+function initAudio() { if (audioCtx) return; audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function playNote(f,d,t,v,dl) {
+  if (!audioCtx) return;
+  const tm = audioCtx.currentTime + (dl||0);
+  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+  o.type = t||'sine'; o.frequency.setValueAtTime(f,tm);
+  g.gain.setValueAtTime(v||0.08,tm); g.gain.exponentialRampToValueAtTime(0.001,tm+d);
+  o.connect(g); g.connect(audioCtx.destination); o.start(tm); o.stop(tm+d);
+}
+function sfxJump() { initAudio(); playNote(400,.08,'triangle',.06); playNote(600,.1,'triangle',.05,.05); }
+function sfxLand() { initAudio(); playNote(300,.1,'sine',.08); }
+function sfxPerfect() { initAudio(); playNote(800,.1,'sine',.1); playNote(1000,.12,'sine',.08,.08); playNote(1200,.15,'sine',.06,.16); }
+function sfxFall() { initAudio(); playNote(400,.15,'sawtooth',.06); playNote(250,.25,'sawtooth',.05,.1); playNote(150,.35,'sawtooth',.04,.25); }
+
+/* ========== 等距投影工具 ========== */
+const ISO_ANGLE = Math.PI / 6; // 30度
+const COS_A = Math.cos(ISO_ANGLE), SIN_A = Math.sin(ISO_ANGLE);
+
+function toIso(x, y, z) {
+  return {
+    sx: (x - y) * COS_A,
+    sy: (x + y) * SIN_A - z,
+  };
+}
+
+/* ========== 平台 ========== */
+const PLATFORM_COLORS = [
+  ['#3498db','#2980b9'],['#e74c3c','#c0392b'],['#2ecc71','#27ae60'],
+  ['#f39c12','#d68910'],['#9b59b6','#7d3c98'],['#1abc9c','#16a085'],
+  ['#e67e22','#ca6f1e'],['#fd79a8','#e84393'],
+];
+
+class Platform {
+  constructor(x, y, size, colorIdx) {
+    this.x = x; this.y = y;
+    this.size = size; // 正方形边长
+    this.h = 30; // 高度
+    this.color = PLATFORM_COLORS[colorIdx % PLATFORM_COLORS.length];
+    this.scale = 1; // 落地压缩动画
+    this.scaleT = 0;
+  }
+
+  draw(ctx, camX, camY) {
+    const s = this.size;
+    const h = this.h * this.scale;
+    // 四个顶角 (3D)
+    const corners = [
+      toIso(this.x - s/2, this.y - s/2, 0),
+      toIso(this.x + s/2, this.y - s/2, 0),
+      toIso(this.x + s/2, this.y + s/2, 0),
+      toIso(this.x - s/2, this.y + s/2, 0),
+    ];
+    const topCorners = corners.map(c => ({ sx: c.sx - camX + W/2, sy: c.sy - h - camY + H * 0.6 }));
+    const botCorners = corners.map(c => ({ sx: c.sx - camX + W/2, sy: c.sy - camY + H * 0.6 }));
+
+    // 侧面（左）
+    ctx.fillStyle = this.darken(this.color[1], 0.7);
+    ctx.beginPath();
+    ctx.moveTo(topCorners[3].sx, topCorners[3].sy);
+    ctx.lineTo(topCorners[2].sx, topCorners[2].sy);
+    ctx.lineTo(botCorners[2].sx, botCorners[2].sy);
+    ctx.lineTo(botCorners[3].sx, botCorners[3].sy);
+    ctx.closePath(); ctx.fill();
+
+    // 侧面（右）
+    ctx.fillStyle = this.darken(this.color[1], 0.85);
+    ctx.beginPath();
+    ctx.moveTo(topCorners[1].sx, topCorners[1].sy);
+    ctx.lineTo(topCorners[2].sx, topCorners[2].sy);
+    ctx.lineTo(botCorners[2].sx, botCorners[2].sy);
+    ctx.lineTo(botCorners[1].sx, botCorners[1].sy);
+    ctx.closePath(); ctx.fill();
+
+    // 顶面
+    const grad = ctx.createLinearGradient(topCorners[0].sx, topCorners[0].sy, topCorners[2].sx, topCorners[2].sy);
+    grad.addColorStop(0, this.color[0]);
+    grad.addColorStop(1, this.color[1]);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(topCorners[0].sx, topCorners[0].sy);
+    ctx.lineTo(topCorners[1].sx, topCorners[1].sy);
+    ctx.lineTo(topCorners[2].sx, topCorners[2].sy);
+    ctx.lineTo(topCorners[3].sx, topCorners[3].sy);
+    ctx.closePath(); ctx.fill();
+
+    // 中心标记
+    const center = toIso(this.x, this.y, 0);
+    const csx = center.sx - camX + W/2, csy = center.sy - h - camY + H * 0.6;
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(csx, csy, s * 0.12, s * 0.07, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 压缩动画恢复
+    if (this.scale < 1) { this.scale += 0.05; if (this.scale > 1) this.scale = 1; }
+  }
+
+  darken(hex, f) {
+    const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return `rgb(${Math.floor(r*f)},${Math.floor(g*f)},${Math.floor(b*f)})`;
+  }
+
+  getTopZ() { return this.h * this.scale; }
+}
+
+/* ========== 棋子（玩家） ========== */
+class Player {
+  constructor() {
+    this.x = 0; this.y = 0; this.z = 0;
+    this.vx = 0; this.vy = 0; this.vz = 0;
+    this.onPlatform = null;
+    this.jumping = false;
+    this.falling = false;
+    this.squish = 1; // 压缩比
+    this.rotation = 0;
+  }
+
+  draw(ctx, camX, camY) {
+    const p = toIso(this.x, this.y, this.z);
+    const sx = p.sx - camX + W/2;
+    const sy = p.sy - camY + H * 0.6;
+    const baseH = 30 * this.squish;
+    const baseW = 14 / this.squish;
+
+    // 阴影
+    const shadowP = toIso(this.x, this.y, 0);
+    const shx = shadowP.sx - camX + W/2, shy = shadowP.sy - (this.onPlatform ? this.onPlatform.getTopZ() : 0) - camY + H * 0.6;
+    ctx.fillStyle = `rgba(0,0,0,${0.2 - this.z * 0.001})`;
+    ctx.beginPath();
+    ctx.ellipse(shx, shy, 12, 7, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    // 棋子身体（圆柱+圆头）
+    const bodyGrad = ctx.createLinearGradient(-baseW, -baseH, baseW, 0);
+    bodyGrad.addColorStop(0, '#444');
+    bodyGrad.addColorStop(0.5, '#222');
+    bodyGrad.addColorStop(1, '#111');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.moveTo(-baseW, 0);
+    ctx.lineTo(-baseW * 0.7, -baseH * 0.7);
+    ctx.quadraticCurveTo(-baseW * 0.5, -baseH, 0, -baseH);
+    ctx.quadraticCurveTo(baseW * 0.5, -baseH, baseW * 0.7, -baseH * 0.7);
+    ctx.lineTo(baseW, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    // 头部
+    const headR = baseW * 0.65;
+    const headGrad = ctx.createRadialGradient(-2, -baseH - headR * 0.3, 1, 0, -baseH, headR);
+    headGrad.addColorStop(0, '#666');
+    headGrad.addColorStop(1, '#222');
+    ctx.fillStyle = headGrad;
+    ctx.beginPath();
+    ctx.arc(0, -baseH, headR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 高光
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.beginPath();
+    ctx.ellipse(-2, -baseH - headR * 0.3, headR * 0.4, headR * 0.25, -0.3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+}
+
+/* ========== 粒子 ========== */
+let particles = [];
+function spawnParticles(x, y, z, color, count) {
+  for (let i = 0; i < count; i++) {
+    particles.push({
+      x, y, z,
+      vx: (Math.random() - 0.5) * 4,
+      vy: (Math.random() - 0.5) * 4,
+      vz: Math.random() * 5 + 2,
+      life: 1, color,
+      size: Math.random() * 3 + 2,
+    });
+  }
+}
+
+/* ========== 飘分 ========== */
+let floatTexts = [];
+function addFloatText(x, y, z, text, color) {
+  floatTexts.push({ x, y, z, text, color, alpha: 1, vy: 2 });
+}
+
+/* ========== 游戏状态 ========== */
+let platforms = [];
+let player;
+let score = 0, combo = 0;
+let bestScore = parseInt(localStorage.getItem('jumpjump_best') || '0');
+let camera = { x: 0, y: 0, targetX: 0, targetY: 0 };
+let charging = false, chargeTime = 0;
+let gameState = 'ready'; // ready | charging | jumping | falling | gameover
+let direction = 1; // 1=右, -1=前
+let colorIdx = 0;
+
+document.getElementById('best').textContent = bestScore;
+
+function createPlatform(afterPlat) {
+  const dist = 60 + Math.random() * 80;
+  const size = 40 + Math.random() * 40;
+  direction = Math.random() > 0.5 ? 1 : -1; // 随机向右或向前
+  let nx, ny;
+  if (direction === 1) {
+    nx = afterPlat.x + dist;
+    ny = afterPlat.y;
+  } else {
+    nx = afterPlat.x;
+    ny = afterPlat.y + dist;
+  }
+  colorIdx++;
+  return new Platform(nx, ny, size, colorIdx);
+}
+
+function initGame() {
+  platforms = [];
+  player = new Player();
+  score = 0; combo = 0;
+  charging = false; chargeTime = 0;
+  particles = []; floatTexts = [];
+  colorIdx = 0;
+  document.getElementById('score').textContent = 0;
+  document.getElementById('combo').textContent = 0;
+  document.getElementById('overlay').classList.add('hidden');
+
+  // 初始平台
+  const first = new Platform(0, 0, 70, 0);
+  platforms.push(first);
+  for (let i = 0; i < 3; i++) {
+    platforms.push(createPlatform(platforms[platforms.length - 1]));
+  }
+
+  player.x = platforms[0].x;
+  player.y = platforms[0].y;
+  player.z = platforms[0].getTopZ();
+  player.onPlatform = platforms[0];
+
+  camera.x = player.x; camera.y = player.y;
+  camera.targetX = player.x; camera.targetY = player.y;
+
+  gameState = 'ready';
+}
+
+function restartGame() { initGame(); }
+
+/* ========== 输入 ========== */
+canvas.addEventListener('mousedown', e => { e.preventDefault(); onPress(); });
+canvas.addEventListener('mouseup', e => { onRelease(); });
+canvas.addEventListener('touchstart', e => { e.preventDefault(); onPress(); });
+canvas.addEventListener('touchend', e => { onRelease(); });
+
+function onPress() {
+  if (gameState === 'gameover') return;
+  if (gameState !== 'ready') return;
+  initAudio();
+  charging = true;
+  chargeTime = 0;
+  gameState = 'charging';
+}
+
+function onRelease() {
+  if (gameState !== 'charging') return;
+  charging = false;
+  jump();
+}
+
+/* ========== 跳跃 ========== */
+function jump() {
+  const power = Math.min(chargeTime, 80) / 80; // 0~1
+  const force = 4 + power * 12; // 跳跃力度
+
+  sfxJump();
+
+  // 方向：朝下一个平台跳
+  const nextPlat = platforms[1];
+  const dx = nextPlat.x - player.x;
+  const dy = nextPlat.y - player.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
+  player.vx = (dx / dist) * force;
+  player.vy = (dy / dist) * force;
+  player.vz = 8 + power * 5;
+  player.jumping = true;
+  player.onPlatform = null;
+  gameState = 'jumping';
+}
+
+/* ========== 更新 ========== */
+function update() {
+  // 蓄力
+  if (gameState === 'charging') {
+    chargeTime++;
+    // 棋子压缩
+    player.squish = 1 - Math.min(chargeTime, 80) / 80 * 0.4;
+    // 当前平台压缩
+    if (player.onPlatform) {
+      player.onPlatform.scale = 1 - Math.min(chargeTime, 80) / 80 * 0.1;
+    }
+  }
+
+  // 跳跃物理
+  if (gameState === 'jumping' || gameState === 'falling') {
+    player.x += player.vx;
+    player.y += player.vy;
+    player.z += player.vz;
+    player.vz -= 0.5; // 重力
+
+    // 落地检测
+    if (player.z <= 0 && player.vz < 0) {
+      // 检查落在哪个平台上
+      let landed = false;
+      for (const plat of platforms) {
+        const dx = player.x - plat.x;
+        const dy = player.y - plat.y;
+        if (Math.abs(dx) < plat.size / 2 && Math.abs(dy) < plat.size / 2) {
+          // 落在平台上！
+          player.z = plat.getTopZ();
+          player.vz = 0; player.vx = 0; player.vy = 0;
+          player.jumping = false;
+          player.onPlatform = plat;
+          player.squish = 0.7;
+          plat.scale = 0.85;
+
+          // 计分
+          const centerDist = Math.sqrt(dx * dx + dy * dy);
+          if (centerDist < 8) {
+            // 完美落地
+            combo++;
+            const pts = 2 * combo;
+            score += pts;
+            sfxPerfect();
+            spawnParticles(player.x, player.y, player.z, '#feca57', 15);
+            addFloatText(player.x, player.y, player.z + 40, `完美 +${pts}`, '#feca57');
+          } else {
+            combo = 0;
+            score += 1;
+            sfxLand();
+            spawnParticles(player.x, player.y, player.z, plat.color[0], 6);
+            addFloatText(player.x, player.y, player.z + 40, '+1', '#fff');
+          }
+          document.getElementById('score').textContent = score;
+          document.getElementById('combo').textContent = combo;
+
+          landed = true;
+          gameState = 'ready';
+
+          // 移除旧平台，添加新平台
+          while (platforms.length > 4) platforms.shift();
+          platforms.push(createPlatform(platforms[platforms.length - 1]));
+
+          // 摄像机目标
+          camera.targetX = player.x;
+          camera.targetY = player.y;
+          break;
+        }
+      }
+
+      if (!landed) {
+        // 掉落！
+        player.z = 0;
+        player.vz = -2;
+        gameState = 'falling';
+        sfxFall();
+        setTimeout(() => {
+          gameState = 'gameover';
+          if (score > bestScore) {
+            bestScore = score;
+            localStorage.setItem('jumpjump_best', bestScore);
+            document.getElementById('best').textContent = bestScore;
+          }
+          setTimeout(() => {
+            document.getElementById('r-title').textContent = '💫 游戏结束';
+            document.getElementById('r-msg').textContent = `得分：${score} 分`;
+            document.getElementById('overlay').classList.remove('hidden');
+          }, 400);
+        }, 600);
+      }
+    }
+  }
+
+  // 掉落动画
+  if (gameState === 'falling') {
+    player.x += player.vx;
+    player.y += player.vy;
+    player.z += player.vz;
+    player.vz -= 0.6;
+    player.rotation += 0.1;
+  }
+
+  // 棋子恢复
+  if (gameState === 'ready' && player.squish < 1) {
+    player.squish += 0.05;
+    if (player.squish > 1) player.squish = 1;
+  }
+
+  // 摄像机平滑跟随
+  camera.x += (camera.targetX - camera.x) * 0.08;
+  camera.y += (camera.targetY - camera.y) * 0.08;
+
+  // 粒子更新
+  for (const p of particles) {
+    p.x += p.vx; p.y += p.vy; p.z += p.vz;
+    p.vz -= 0.2; p.life -= 0.025;
+  }
+  particles = particles.filter(p => p.life > 0);
+
+  // 飘分更新
+  for (const f of floatTexts) {
+    f.z += f.vy; f.alpha -= 0.02;
+  }
+  floatTexts = floatTexts.filter(f => f.alpha > 0);
+}
+
+/* ========== 渲染 ========== */
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+
+  // 背景渐变
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#2c3e50');
+  bg.addColorStop(0.5, '#34495e');
+  bg.addColorStop(1, '#1a252f');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // 背景装饰点
+  ctx.fillStyle = 'rgba(255,255,255,0.03)';
+  for (let i = 0; i < 30; i++) {
+    const bx = (i * 97 + camera.x * 0.1) % W;
+    const by = (i * 73 + camera.y * 0.1) % H;
+    ctx.beginPath(); ctx.arc(bx, by, 2, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // 平台（按 y 排序）
+  const sortedPlats = [...platforms].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+  for (const plat of sortedPlats) {
+    plat.draw(ctx, camera.x, camera.y);
+  }
+
+  // 玩家
+  if (gameState !== 'gameover' || player.z > -50) {
+    player.draw(ctx, camera.x, camera.y);
+  }
+
+  // 粒子
+  for (const p of particles) {
+    const sp = toIso(p.x, p.y, p.z);
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(sp.sx - camera.x + W/2, sp.sy - camera.y + H * 0.6, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // 飘分
+  for (const f of floatTexts) {
+    const sp = toIso(f.x, f.y, f.z);
+    ctx.globalAlpha = f.alpha;
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, sp.sx - camera.x + W/2, sp.sy - camera.y + H * 0.6);
+  }
+  ctx.globalAlpha = 1;
+
+  // 蓄力条
+  if (gameState === 'charging') {
+    const barW = 60, barH = 8;
+    const bx = W / 2 - barW / 2, by = H - 40;
+    const pct = Math.min(chargeTime, 80) / 80;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(bx - 2, by - 2, barW + 4, barH + 4);
+
+    const grad = ctx.createLinearGradient(bx, 0, bx + barW, 0);
+    grad.addColorStop(0, '#2ecc71');
+    grad.addColorStop(0.5, '#feca57');
+    grad.addColorStop(1, '#e74c3c');
+    ctx.fillStyle = grad;
+    ctx.fillRect(bx, by, barW * pct, barH);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bx, by, barW, barH);
+  }
+}
+
+/* ========== 主循环 ========== */
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+initGame();
+loop();
+</script>
+</body>
+</html>
