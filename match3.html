@@ -279,7 +279,7 @@ function sfxFail() {
   playNote(200, 0.35, 'sawtooth', 0.04, 0.3);
 }
 
-/* 背景音乐：简单循环旋律 */
+/* 背景音乐：多层循环旋律 */
 function startBGM() {
   stopBGM();
   if (!audioCtx) initAudio();
@@ -289,11 +289,18 @@ function startBGM() {
     587, 0, 698, 0, 880, 0, 698, 0,
     587, 0, 880, 0, 698, 0, 587, 0,
   ];
+  const bass = [
+    262, 0, 0, 0, 262, 0, 0, 0,
+    262, 0, 0, 0, 330, 0, 0, 0,
+    294, 0, 0, 0, 294, 0, 0, 0,
+    294, 0, 0, 0, 349, 0, 0, 0,
+  ];
   let idx = 0;
   bgmTimer = setInterval(() => {
     if (!musicOn) return;
-    const freq = melody[idx % melody.length];
-    if (freq > 0) playNote(freq, 0.22, 'sine', 0.04);
+    const i = idx % melody.length;
+    if (melody[i] > 0) playNote(melody[i], 0.22, 'sine', 0.12);
+    if (bass[i] > 0) playNote(bass[i], 0.35, 'triangle', 0.08);
     idx++;
   }, 280);
 }
