@@ -45,6 +45,18 @@
     cursor: pointer; transition: transform .2s; margin: 0 6px;
   }
   .modal button:hover { transform: scale(1.06); }
+  .mobile-controls { display:none; margin-top:10px; position:relative; width:320px; height:120px; }
+  .dpad { position:absolute; left:0; bottom:0; width:120px; height:120px; }
+  .dpad-btn { position:absolute; width:40px; height:40px; background:rgba(255,255,255,.12); border:2px solid rgba(255,255,255,.2); border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:1.2rem; touch-action:manipulation; user-select:none; -webkit-tap-highlight-color:transparent; }
+  .dpad-btn:active { background:rgba(255,255,255,.3); }
+  .dpad-left { left:0; top:40px; }
+  .dpad-right { left:80px; top:40px; }
+  .dpad-up { left:40px; top:0; }
+  .action-btns { position:absolute; right:0; bottom:10px; display:flex; gap:12px; }
+  .action-btn { width:56px; height:56px; border-radius:50%; background:rgba(255,107,107,.15); border:2px solid rgba(255,107,107,.3); color:#ff6b6b; font-size:1.1rem; font-weight:bold; display:flex; align-items:center; justify-content:center; touch-action:manipulation; user-select:none; -webkit-tap-highlight-color:transparent; }
+  .action-btn:active { background:rgba(255,107,107,.35); }
+  @media(max-width:768px) { .mobile-controls{display:block;} .canvas-wrap canvas{max-width:95vw;height:auto;} }
+  @media(hover:none)and (pointer:coarse) { .mobile-controls{display:block;} }
 </style>
 </head>
 <body>
@@ -61,6 +73,16 @@
   <canvas id="game" width="800" height="480"></canvas>
 </div>
 <p class="tip">← → 移动 · ↑ / 空格 跳跃 · 踩敌人消灭 · 到达旗杆过关</p>
+<div class="mobile-controls" id="mobileCtrl">
+  <div class="dpad">
+    <div class="dpad-btn dpad-left" id="btn-left">◀</div>
+    <div class="dpad-btn dpad-right" id="btn-right">▶</div>
+    <div class="dpad-btn dpad-up" id="btn-up">▲</div>
+  </div>
+  <div class="action-btns">
+    <div class="action-btn" id="btn-jump">跳</div>
+  </div>
+</div>
 
 <div class="overlay hidden" id="overlay">
   <div class="modal">
@@ -641,6 +663,23 @@ startLevel(1);
 loop();
 
 document.addEventListener('click', function _b() { initAudio(); document.removeEventListener('click', _b); });
+
+// Mobile touch controls
+(function(){
+  const isMobile = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if(!isMobile) return;
+  function bindBtn(id, key) {
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.addEventListener('touchstart', e => { e.preventDefault(); keys[key]=true; initAudio(); }, {passive:false});
+    el.addEventListener('touchend', e => { e.preventDefault(); keys[key]=false; }, {passive:false});
+    el.addEventListener('touchcancel', e => { keys[key]=false; });
+  }
+  bindBtn('btn-left','ArrowLeft');
+  bindBtn('btn-right','ArrowRight');
+  bindBtn('btn-up',' ');
+  bindBtn('btn-jump',' ');
+})();
 </script>
 </body>
 </html>

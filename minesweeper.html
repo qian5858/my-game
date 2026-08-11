@@ -45,10 +45,10 @@
     box-shadow: 0 0 30px rgba(0,212,255,.15);
   }
   .cell {
-    width: 36px; height: 36px;
+    width: var(--cell-size, 36px); height: var(--cell-size, 36px);
     display: flex; align-items: center; justify-content: center;
-    font-size: 1rem; font-weight: bold; border-radius: 4px;
-    cursor: pointer; transition: all .1s;
+    font-size: clamp(.7rem, calc(var(--cell-size, 36px) * 0.4), 1rem); font-weight: bold; border-radius: 4px;
+    cursor: pointer; transition: all .1s; touch-action: manipulation; -webkit-tap-highlight-color: transparent;
   }
   .cell.hidden {
     background: linear-gradient(145deg, #1e3a5f, #162d4a);
@@ -90,6 +90,22 @@
 
   .win h2 { color: #4caf50; }
   .lose h2 { color: #f44336; }
+  .flag-toggle { display:none; margin:8px 0; }
+  .flag-toggle button { padding:8px 20px; border:2px solid #ba68c8; border-radius:8px; background:transparent; color:#ba68c8; font-size:.95rem; cursor:pointer; transition:all .2s; }
+  .flag-toggle button.active { background:#ba68c8; color:#1a1a2e; font-weight:bold; }
+  @media(max-width:768px) {
+    .flag-toggle { display:flex; gap:8px; justify-content:center; }
+    h1 { font-size:1.4rem; }
+    .info-bar { font-size:1rem; gap:12px; }
+    .dice-scene { width:60px; height:60px; }
+    .dice-face { width:60px; height:60px; font-size:1.1rem; }
+    .dice-face.f1 { transform: rotateY(0deg) translateZ(30px); }
+    .dice-face.f2 { transform: rotateY(180deg) translateZ(30px); }
+    .dice-face.f3 { transform: rotateY(90deg) translateZ(30px); }
+    .dice-face.f4 { transform: rotateY(-90deg) translateZ(30px); }
+    .dice-face.f5 { transform: rotateX(90deg) translateZ(30px); }
+    .dice-face.f6 { transform: rotateX(-90deg) translateZ(30px); }
+  }
 
   /* 3D 骰子 */
   .dice-section { margin-top: 18px; text-align: center; }
@@ -142,6 +158,11 @@
   <span><i class="icon">⏱</i> <span id="timer">0</span>s</span>
 </div>
 
+<div class="flag-toggle" id="flagToggle">
+  <button id="btn-reveal" class="active" onclick="setFlagMode(false)">💣 挖雷</button>
+  <button id="btn-flag" onclick="setFlagMode(true)">🚩 插旗</button>
+</div>
+
 <div class="board" id="board"></div>
 
 <div class="dice-section">
@@ -179,6 +200,7 @@ let rows, cols, totalMines;
 let board, revealed, flagged, mineMap;
 let gameOver, firstClick, flagCount, revealedCount;
 let timerInterval, seconds;
+let flagMode = false;
 
 const boardEl   = document.getElementById('board');
 const mineEl    = document.getElementById('mine-count');
@@ -241,14 +263,20 @@ function countAdj(r, c) {
 const dirs = () => [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
 
 function renderBoard() {
-  boardEl.style.gridTemplateColumns = `repeat(${cols}, 36px)`;
+  // Calculate responsive cell size
+  const maxW = Math.min(window.innerWidth - 32, 600);
+  const cellSize = Math.min(36, Math.floor(maxW / cols));
+  boardEl.style.setProperty('--cell-size', cellSize + 'px');
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, var(--cell-size, 36px))`;
   boardEl.innerHTML = '';
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const cell = document.createElement('div');
       cell.className = 'cell hidden';
       cell.dataset.r = r; cell.dataset.c = c;
-      cell.addEventListener('click', () => handleClick(r, c));
+      cell.addEventListener('click', () => {
+        if(flagMode) { handleFlag(r, c); } else { handleClick(r, c); }
+      });
       cell.addEventListener('contextmenu', e => { e.preventDefault(); handleFlag(r, c); });
       boardEl.appendChild(cell);
     }
@@ -327,6 +355,12 @@ function showResult(win) {
 }
 
 function restartGame() { initGame(); }
+
+function setFlagMode(on) {
+  flagMode = on;
+  document.getElementById('btn-reveal').classList.toggle('active', !on);
+  document.getElementById('btn-flag').classList.toggle('active', on);
+}
 
 /* ---- 3D 骰子 ---- */
 const diceRotations = [

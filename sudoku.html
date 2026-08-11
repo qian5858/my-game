@@ -11,7 +11,7 @@ body{background:linear-gradient(180deg,#0a0a1a,#1a1a2e);min-height:100vh;display
 .header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
 .header .val{font-weight:bold;color:#feca57;min-width:24px;text-align:center}
 .board{display:grid;grid-template-columns:repeat(9,1fr);gap:1px;background:rgba(255,255,255,.15);border:2px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;width:min(380px,90vw);height:min(380px,90vw)}
-.cell{background:rgba(13,17,23,.9);display:flex;align-items:center;justify-content:center;font-size:clamp(14px,3.5vw,22px);cursor:pointer;transition:background .15s;position:relative;aspect-ratio:1}
+.cell{background:rgba(13,17,23,.9);display:flex;align-items:center;justify-content:center;font-size:clamp(14px,3.5vw,22px);cursor:pointer;transition:background .15s;position:relative;aspect-ratio:1;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .cell:hover{background:rgba(72,219,251,.1)}
 .cell.given{color:#48dbfb;font-weight:bold}
 .cell.user{color:#2ecc71}
@@ -27,7 +27,7 @@ body{background:linear-gradient(180deg,#0a0a1a,#1a1a2e);min-height:100vh;display
 .cell .notes{display:grid;grid-template-columns:repeat(3,1fr);font-size:clamp(6px,1.5vw,9px);color:#667;width:100%;height:100%;position:absolute;top:0;left:0}
 .cell .notes span{display:flex;align-items:center;justify-content:center}
 .numpad{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;justify-content:center}
-.num-btn{width:38px;height:38px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.05);color:#e0e0e0;font-size:1.1rem;cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;font-family:inherit}
+.num-btn{width:clamp(34px,9vw,42px);height:clamp(34px,9vw,42px);border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.05);color:#e0e0e0;font-size:clamp(.9rem,3vw,1.1rem);cursor:pointer;transition:all .2s;display:flex;align-items:center;justify-content:center;font-family:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .num-btn:hover{background:rgba(255,255,255,.12)}
 .num-btn.active{border-color:#48dbfb;background:rgba(72,219,251,.15);color:#48dbfb}
 .num-btn.done{opacity:.3}

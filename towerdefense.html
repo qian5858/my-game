@@ -11,8 +11,18 @@ body{background:#0a0a1a;min-height:100vh;display:flex;flex-direction:column;alig
 .header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
 .header .val{font-weight:bold;color:#feca57;min-width:24px;text-align:center}
 .game-area{display:flex;gap:8px;align-items:flex-start}
-canvas{display:block;border-radius:8px;border:2px solid #2a2a4a;box-shadow:0 0 30px rgba(255,107,107,.08);cursor:crosshair}
+canvas{display:block;border-radius:8px;border:2px solid #2a2a4a;box-shadow:0 0 30px rgba(255,107,107,.08);cursor:crosshair;max-width:90vw;height:auto;touch-action:manipulation}
 .side{display:flex;flex-direction:column;gap:6px;width:110px}
+@media(max-width:768px){
+  .game-area{flex-direction:column;align-items:center}
+  .side{flex-direction:row;width:auto;flex-wrap:wrap;justify-content:center}
+  .tower-card{padding:6px;min-width:70px}
+  .tip{font-size:.65rem}
+}
+@media(hover:none)and (pointer:coarse){
+  .game-area{flex-direction:column;align-items:center}
+  .side{flex-direction:row;width:auto;flex-wrap:wrap;justify-content:center}
+}
 .tower-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px;cursor:pointer;transition:all .2s;text-align:center}
 .tower-card:hover{border-color:#48dbfb;background:rgba(72,219,251,.06)}
 .tower-card.selected{border-color:#feca57;background:rgba(254,202,87,.08)}
@@ -332,6 +342,38 @@ cv.addEventListener('mousemove',e=>{
   const my=(e.clientY-rect.top)*(H/rect.height);
   hoverCell={col:Math.floor(mx/CELL),row:Math.floor(my/CELL)};
 });
+
+// Touch support
+cv.addEventListener('touchstart',e=>{
+  e.preventDefault();
+  const touch=e.touches[0];
+  const rect=cv.getBoundingClientRect();
+  const mx=(touch.clientX-rect.left)*(W/rect.width);
+  const my=(touch.clientY-rect.top)*(H/rect.height);
+  hoverCell={col:Math.floor(mx/CELL),row:Math.floor(my/CELL)};
+},{passive:false});
+cv.addEventListener('touchend',e=>{
+  e.preventDefault();
+  if(gameOver||!hoverCell)return;
+  const{col,row}=hoverCell;
+  if(col<0||col>=COLS||row<0||row>=ROWS)return;
+  // Simulate click
+  const existing=towers.find(t=>t.col===col&&t.row===row);
+  if(existing){
+    const type=TOWER_TYPES[existing.type];
+    const cost=type.upgCost*(existing.level+1);
+    if(gold>=cost&&existing.level<3){gold-=cost;existing.level++;existing.range+=10;updateUI();}
+    return;
+  }
+  if(selectedTower===null)return;
+  if(pathSet.has(`${col},${row}`))return;
+  if(towers.some(t=>t.col===col&&t.row===row))return;
+  const type=TOWER_TYPES[selectedTower];
+  if(gold<type.cost)return;
+  gold-=type.cost;
+  towers.push({col,row,x:col*CELL+CELL/2,y:row*CELL+CELL/2,type:selectedTower,level:0,range:type.range,cooldown:0,target:null});
+  updateUI();
+},{passive:false});
 
 function draw(){
   ctx.fillStyle='#0d1117';ctx.fillRect(0,0,W,H);

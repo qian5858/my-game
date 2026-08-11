@@ -18,6 +18,12 @@ body{background:linear-gradient(180deg,#0a0a1a,#1a1a2e);min-height:100vh;display
 .canvas-wrap{border:2px solid #2a2a4a;border-radius:10px;overflow:hidden;box-shadow:0 0 30px rgba(72,219,251,.08)}
 canvas{display:block}
 .tip{margin-top:6px;font-size:.7rem;color:#445;text-align:center}
+.mobile-controls{display:none;margin-top:8px;gap:6px;justify-content:center;flex-wrap:wrap}
+.ctrl-btn{width:52px;height:52px;border:2px solid rgba(72,219,251,.3);border-radius:12px;background:rgba(72,219,251,.08);color:#48dbfb;font-size:1.3rem;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none}
+.ctrl-btn:active{background:rgba(72,219,251,.25);transform:scale(.92)}
+.ctrl-row{display:flex;gap:6px;justify-content:center}
+@media(max-width:768px){.mobile-controls{display:flex;flex-direction:column;align-items:center}.game-area{flex-direction:column;align-items:center}.side-panel{flex-direction:row;width:auto}.canvas-wrap canvas{max-width:90vw;height:auto}}
+@media(hover:none)and (pointer:coarse){.mobile-controls{display:flex;flex-direction:column;align-items:center}}
 .overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.65);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
 .overlay h2{font-size:1.8rem;margin-bottom:6px}
 .overlay p{color:#aab;margin-bottom:12px}
@@ -46,6 +52,18 @@ canvas{display:block}
   </div>
 </div>
 <div class="tip">← → 移动 · ↑ 旋转 · ↓ 软降 · 空格硬降 · C 保持 · P 暂停</div>
+<div class="mobile-controls" id="mobileCtrl">
+  <div class="ctrl-row">
+    <div class="ctrl-btn" ontouchstart="rotatePiece();event.preventDefault()" onclick="rotatePiece()">↻</div>
+    <div class="ctrl-btn" ontouchstart="hardDrop();event.preventDefault()" onclick="hardDrop()">⤓</div>
+    <div class="ctrl-btn" ontouchstart="holdSwap();event.preventDefault()" onclick="holdSwap()">H</div>
+  </div>
+  <div class="ctrl-row">
+    <div class="ctrl-btn" ontouchstart="moveLeft();event.preventDefault()" onclick="moveLeft()">◀</div>
+    <div class="ctrl-btn" ontouchstart="softDrop();event.preventDefault()" onclick="softDrop()">▼</div>
+    <div class="ctrl-btn" ontouchstart="moveRight();event.preventDefault()" onclick="moveRight()">▶</div>
+  </div>
+</div>
 
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
