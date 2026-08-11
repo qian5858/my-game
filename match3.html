@@ -13,7 +13,7 @@
     display: flex; flex-direction: column; align-items: center;
     justify-content: flex-start; color: #e0e0e0; user-select: none;
     overflow-x: hidden; overflow-y: auto;
-    padding: 10px 0 20px;
+    padding: 10px 8px 20px;
   }
   h1 {
     font-size: clamp(1.4rem, 5vw, 2.2rem); margin-bottom: 10px; letter-spacing: 6px;
@@ -53,19 +53,18 @@
 
   /* 棋盘 */
   .board-wrap {
-    position: relative; padding: 10px;
+    position: relative; padding: 8px;
     background: rgba(0,0,0,.35); border-radius: 16px;
     box-shadow: 0 0 40px rgba(100,100,255,.12);
-    transform-origin: top center;
     flex-shrink: 0;
   }
   .board { position: relative; }
 
   /* 宝石 */
   .gem {
-    position: absolute; border-radius: 16px; cursor: pointer;
+    position: absolute; border-radius: calc(var(--cs,56px)*0.286); cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    font-size: 1.7rem; transition: left .25s ease, top .25s ease, transform .2s, opacity .25s;
+    font-size: var(--fs,1.7rem); transition: left .25s ease, top .25s ease, transform .2s, opacity .25s;
     touch-action: manipulation; -webkit-tap-highlight-color: transparent;
     box-shadow:
       inset 0 4px 8px rgba(255,255,255,.35),
@@ -309,7 +308,18 @@ function toggleMusic() {
 }
 
 /* ========== 游戏逻辑 ========== */
-const ROWS = 8, COLS = 8, CELL = 56, GAP = 4, GEM_SIZE = 44;
+const ROWS = 8, COLS = 8;
+/* 响应式尺寸：根据视口宽度动态计算格子大小 */
+let CELL, GAP, GEM_SIZE, STEP;
+function calcSizes() {
+  var maxW = window.innerWidth - 32; // 左右各16px边距
+  STEP = Math.floor(maxW / COLS);    // 每格占用的总宽度
+  CELL = Math.max(28, STEP - 4);     // 格子大小 = 步长 - 间距
+  GAP  = STEP - CELL;                // 间距 = 步长 - 格子大小
+  GEM_SIZE = Math.round(CELL * 0.786); // 宝石略小于格子
+  if (GEM_SIZE > CELL) { GEM_SIZE = CELL; }
+}
+calcSizes();
 const ALL_GEMS = [
   { icon: '🍓', cls: 'g0' },   // 草莓 红
   { icon: '🍀', cls: 'g1' },   // 四叶草 绿
@@ -348,8 +358,14 @@ const comboTextEl = document.getElementById('combo-text');
 const overlayEl   = document.getElementById('overlay');
 const modalBtns   = document.getElementById('modal-buttons');
 
-boardEl.style.width  = COLS * (CELL + GAP) + 'px';
-boardEl.style.height = ROWS * (CELL + GAP) + 'px';
+function updateBoardSize() {
+  boardEl.style.width  = COLS * STEP + 'px';
+  boardEl.style.height = ROWS * STEP + 'px';
+  // 设置 CSS 变量供样式使用
+  boardEl.style.setProperty('--cs', CELL + 'px');
+  boardEl.style.setProperty('--fs', Math.max(0.9, CELL * 0.03) + 'rem');
+}
+updateBoardSize();
 
 function loadLevel(lv) {
   currentLevel = lv;
@@ -413,11 +429,11 @@ function createGemEl(r, c, type) {
   const gemDef = GEMS[type];
   el.className = 'gem ' + gemDef.cls;
   el.textContent = gemDef.icon;
-  const offset = (CELL - GEM_SIZE) / 2;
+  const offset = Math.round((CELL - GEM_SIZE) / 2);
   el.style.width  = GEM_SIZE + 'px';
   el.style.height = GEM_SIZE + 'px';
-  el.style.left = c * (CELL + GAP) + offset + 'px';
-  el.style.top  = r * (CELL + GAP) + offset + 'px';
+  el.style.left = c * STEP + offset + 'px';
+  el.style.top  = r * STEP + offset + 'px';
   el.dataset.r = r; el.dataset.c = c;
   el.addEventListener('click', function() { onGemClick(+this.dataset.r, +this.dataset.c); });
   return el;
@@ -491,10 +507,10 @@ function swap(r1, c1, r2, c2) {
 }
 
 async function animateSwap(el1, el2, r1, c1, r2, c2) {
-  const off = (CELL - GEM_SIZE) / 2;
+  const off = Math.round((CELL - GEM_SIZE) / 2);
   // el1 从 (r1,c1) 移到 (r2,c2)，el2 从 (r2,c2) 移到 (r1,c1)
-  if (el1) { el1.style.left = c2 * (CELL+GAP) + off + 'px'; el1.style.top = r2 * (CELL+GAP) + off + 'px'; el1.dataset.r = r2; el1.dataset.c = c2; }
-  if (el2) { el2.style.left = c1 * (CELL+GAP) + off + 'px'; el2.style.top = r1 * (CELL+GAP) + off + 'px'; el2.dataset.r = r1; el2.dataset.c = c1; }
+  if (el1) { el1.style.left = c2 * STEP + off + 'px'; el1.style.top = r2 * STEP + off + 'px'; el1.dataset.r = r2; el1.dataset.c = c2; }
+  if (el2) { el2.style.left = c1 * STEP + off + 'px'; el2.style.top = r1 * STEP + off + 'px'; el2.dataset.r = r1; el2.dataset.c = c1; }
   await sleep(260);
 }
 
@@ -567,7 +583,7 @@ async function resolveMatches() {
 }
 
 async function dropAndFill() {
-  const off = (CELL - GEM_SIZE) / 2;
+  const off = Math.round((CELL - GEM_SIZE) / 2);
   // 逐列处理下落
   for (let c = 0; c < COLS; c++) {
     let emptyRow = ROWS - 1;
@@ -579,7 +595,7 @@ async function dropAndFill() {
           const el = getGemEl(r, c);
           if (el) {
             el.dataset.r = emptyRow;
-            el.style.top = emptyRow * (CELL + GAP) + off + 'px';
+            el.style.top = emptyRow * STEP + off + 'px';
             el.classList.add('falling');
           }
         }
@@ -591,12 +607,12 @@ async function dropAndFill() {
       const type = randGem();
       grid[r][c] = type;
       const el = createGemEl(r, c, type);
-      el.style.top = (-1 * (CELL + GAP)) + 'px'; // 从上方进入
+      el.style.top = (-STEP) + 'px'; // 从上方进入
       el.classList.add('spawning');
       boardEl.appendChild(el);
       // 触发 reflow 后移到正确位置
       void el.offsetHeight;
-      el.style.top = r * (CELL + GAP) + off + 'px';
+      el.style.top = r * STEP + off + 'px';
       el.classList.add('falling');
     }
   }
@@ -612,8 +628,8 @@ function showFloatScore(r, c, pts) {
   const el = document.createElement('div');
   el.className = 'float-score';
   el.textContent = '+' + pts;
-  el.style.left = c * (CELL + GAP) + CELL / 2 + 'px';
-  el.style.top  = r * (CELL + GAP) + 'px';
+  el.style.left = c * STEP + CELL / 2 + 'px';
+  el.style.top  = r * STEP + 'px';
   boardEl.appendChild(el);
   setTimeout(() => el.remove(), 850);
 }
@@ -662,28 +678,30 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 loadLevel(0);
 
-/* 手机端自适应缩放 */
+/* 手机端自适应：窗口变化时重新计算尺寸并重绘 */
 (function() {
-  function resizeBoard() {
-    var boardW = COLS * (CELL + GAP) + 20;
-    var boardH = ROWS * (CELL + GAP) + 20;
-    var maxW = window.innerWidth - 16;
-    var scale = Math.min(1, maxW / boardW);
-    var wrap = document.querySelector('.board-wrap');
-    if (wrap) {
-      wrap.style.transform = 'scale(' + scale + ')';
-      wrap.style.width = boardW + 'px';
-      wrap.style.height = boardH + 'px';
-      wrap.style.marginLeft = 'auto';
-      wrap.style.marginRight = 'auto';
-      // 用 marginBottom 补偿缩放后多出的空白
-      var scaledH = boardH * scale;
-      wrap.style.marginBottom = (scale < 1 ? -(boardH - scaledH) + 'px' : '0');
-    }
-  }
-  resizeBoard();
-  window.addEventListener('resize', resizeBoard);
-  window.addEventListener('orientationchange', function() { setTimeout(resizeBoard, 200); });
+  var resizeTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() {
+      var oldStep = STEP;
+      calcSizes();
+      if (STEP !== oldStep) {
+        updateBoardSize();
+        renderBoard(); // 用新尺寸重绘
+      }
+    }, 200);
+  });
+  window.addEventListener('orientationchange', function() {
+    setTimeout(function() {
+      var oldStep = STEP;
+      calcSizes();
+      if (STEP !== oldStep) {
+        updateBoardSize();
+        renderBoard();
+      }
+    }, 300);
+  });
 })();
 
 /* 首次点击页面后启动背景音乐 */
