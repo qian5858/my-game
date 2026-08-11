@@ -163,10 +163,10 @@ function sfxGameOver() { initAudio(); playNote(300,.3,'sawtooth',.1); playNote(2
 /* ========== 背景音乐 ========== */
 let bgmEnabled = true;
 let bgmPlaying = false;
-let bgmInterval = null;
+let bgmTimer = null;
 let bgmGainNode = null;
 
-// 五声音阶旋律 - 轻松愉快的风格
+// 五声音阶旋律
 const PENTATONIC = [262, 294, 330, 392, 440, 524, 588, 660, 784, 880];
 const MELODY_PATTERNS = [
   [0,2,4,5,4,2,0,2], [4,5,6,7,6,5,4,2], [0,4,2,5,4,7,5,6],
@@ -174,34 +174,28 @@ const MELODY_PATTERNS = [
   [4,2,0,2,4,5,7,5], [6,5,4,2,4,5,6,7], [0,5,4,2,0,4,5,7],
   [2,4,7,5,6,4,2,0],
 ];
-const BASS_NOTES = [131, 147, 165, 196, 220]; // C3,A2,C3,G2,A2
+const BASS_NOTES = [131, 147, 165, 196, 220];
 let melodyIdx = 0;
 let noteIdx = 0;
 let bassIdx = 0;
 
-function startBGM() {
-  if (!audioCtx || bgmPlaying) return;
-  bgmPlaying = true;
-  melodyIdx = Math.floor(Math.random() * MELODY_PATTERNS.length);
-  noteIdx = 0; bassIdx = 0;
-
-  // 主音轨
-  bgmGainNode = audioCtx.createGain();
-  bgmGainNode.gain.value = 0.08;
-  bgmGainNode.connect(audioCtx.destination);
-
-  bgmInterval = setInterval(() => {
-    if (!audioCtx || audioCtx.state === 'suspended') return;
+function playBGMNote() {
+  if (!audioCtx || !bgmPlaying) return;
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().catch(function(){});
+    return;
+  }
+  try {
     const pattern = MELODY_PATTERNS[melodyIdx];
     const freq = PENTATONIC[pattern[noteIdx % pattern.length]];
+    const now = audioCtx.currentTime;
 
     // 旋律音
-    const now = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
     const g = audioCtx.createGain();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(freq, now);
-    g.gain.setValueAtTime(0.08, now);
+    g.gain.setValueAtTime(0.1, now);
     g.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
     osc.connect(g); g.connect(bgmGainNode);
     osc.start(now); osc.stop(now + 0.4);
@@ -213,7 +207,7 @@ function startBGM() {
       const bG = audioCtx.createGain();
       bOsc.type = 'triangle';
       bOsc.frequency.setValueAtTime(bassFreq, now);
-      bG.gain.setValueAtTime(0.06, now);
+      bG.gain.setValueAtTime(0.08, now);
       bG.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
       bOsc.connect(bG); bG.connect(bgmGainNode);
       bOsc.start(now); bOsc.stop(now + 0.9);
@@ -223,12 +217,12 @@ function startBGM() {
     // 和弦点缀（每8拍）
     if (noteIdx % 8 === 0) {
       const chordBase = PENTATONIC[pattern[noteIdx % pattern.length]] / 2;
-      [1, 1.25, 1.5].forEach((ratio, ci) => {
+      [1, 1.25, 1.5].forEach(function(ratio, ci) {
         const cOsc = audioCtx.createOscillator();
         const cG = audioCtx.createGain();
         cOsc.type = 'sine';
         cOsc.frequency.setValueAtTime(chordBase * ratio, now);
-        cG.gain.setValueAtTime(0.03, now + ci * 0.05);
+        cG.gain.setValueAtTime(0.04, now + ci * 0.05);
         cG.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
         cOsc.connect(cG); cG.connect(bgmGainNode);
         cOsc.start(now + ci * 0.05); cOsc.stop(now + 1.3);
@@ -240,13 +234,49 @@ function startBGM() {
       noteIdx = 0;
       melodyIdx = (melodyIdx + 1) % MELODY_PATTERNS.length;
     }
-  }, 280);
+  } catch(e) {}
+}
+
+function startBGM() {
+  if (!audioCtx || bgmPlaying) return;
+  // 确保 AudioContext 是 running 状态
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume().then(function() {
+      _startBGMLoop();
+    }).catch(function(){});
+    return;
+  }
+  _startBGMLoop();
+}
+
+function _startBGMLoop() {
+  if (bgmPlaying) return;
+  bgmPlaying = true;
+  melodyIdx = Math.floor(Math.random() * MELODY_PATTERNS.length);
+  noteIdx = 0; bassIdx = 0;
+
+  bgmGainNode = audioCtx.createGain();
+  bgmGainNode.gain.value = 0.1;
+  bgmGainNode.connect(audioCtx.destination);
+
+  // 立即播放第一个音
+  playBGMNote();
+  // 用递归setTimeout代替setInterval（微信不节流setTimeout）
+  function _tick() {
+    if (!bgmPlaying || !audioCtx) return;
+    playBGMNote();
+    bgmTimer = setTimeout(_tick, 300);
+  }
+  bgmTimer = setTimeout(_tick, 300);
 }
 
 function stopBGM() {
   bgmPlaying = false;
-  if (bgmInterval) { clearInterval(bgmInterval); bgmInterval = null; }
-  if (bgmGainNode) { bgmGainNode.gain.value = 0; bgmGainNode = null; }
+  if (bgmTimer) { clearTimeout(bgmTimer); bgmTimer = null; }
+  if (bgmGainNode) {
+    try { bgmGainNode.gain.value = 0; } catch(e) {}
+    bgmGainNode = null;
+  }
 }
 
 function toggleBGM() {
@@ -688,13 +718,15 @@ _unlockEvents.forEach(function(ev) {
 
 // 方案4: 定时检查音频状态（微信可能在延迟后才允许）
 var _audioCheckCount = 0;
-var _audioCheckTimer = setInterval(function() {
+function _audioCheck() {
   _audioCheckCount++;
-  if (_audioCheckCount > 20 || audioUnlocked) { clearInterval(_audioCheckTimer); return; }
+  if (_audioCheckCount > 30 || audioUnlocked) return;
   if (audioCtx && audioCtx.state === 'running' && !bgmPlaying && bgmEnabled) {
     startBGM();
   }
-}, 500);
+  setTimeout(_audioCheck, 500);
+}
+setTimeout(_audioCheck, 500);
 </script>
 </body>
 </html>
