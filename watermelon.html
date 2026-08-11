@@ -434,11 +434,15 @@ function checkMerges() {
         // 特效
         mergeEffects.push({ x: mx, y: my, r: FRUITS[newType].radius * 1.5, alpha: 1, emoji: FRUITS[newType].emoji });
 
+        const _a = a, _b = b;
         setTimeout(() => {
-          bodies = bodies.filter(b => b !== a && b !== b);
+          const idxA = bodies.indexOf(_a);
+          if (idxA !== -1) bodies.splice(idxA, 1);
+          const idxB = bodies.indexOf(_b);
+          if (idxB !== -1) bodies.splice(idxB, 1);
           const newBody = new Body(mx, my, newType);
-          newBody.vx = (a.vx + b.vx) * 0.3;
-          newBody.vy = Math.min(a.vy, b.vy) - 2;
+          newBody.vx = (_a.vx + _b.vx) * 0.3;
+          newBody.vy = Math.min(_a.vy, _b.vy) - 2;
           bodies.push(newBody);
         }, 0);
 
@@ -489,7 +493,7 @@ function update() {
   checkMerges();
 
   // 清理合成标记
-  bodies = bodies.filter(b => !b.merging);
+  bodies = bodies.filter(body => !body.merging);
 
   // 溢出检测
   let danger = false;
