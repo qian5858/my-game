@@ -55,6 +55,8 @@
     position: relative; padding: 10px;
     background: rgba(0,0,0,.35); border-radius: 16px;
     box-shadow: 0 0 40px rgba(100,100,255,.12);
+    max-width: 95vw;
+    transform-origin: top center;
   }
   .board { position: relative; }
 
@@ -456,15 +458,18 @@ function onGemClick(r, c) {
 /* ---- 交换 & 匹配 ---- */
 async function trySwap(r1, c1, r2, c2) {
   busy = true;
+  // 先获取元素引用（数据交换后 data 属性会变，必须提前拿到）
+  const el1 = getGemEl(r1, c1);
+  const el2 = getGemEl(r2, c2);
   swap(r1, c1, r2, c2);
-  await animateSwap(r1, c1, r2, c2);
+  await animateSwap(el1, el2, r1, c1, r2, c2);
 
   const matches = findMatches();
   if (matches.length === 0) {
     // 无匹配 → 换回
     sfxBadSwap();
     swap(r1, c1, r2, c2);
-    await animateSwap(r1, c1, r2, c2);
+    await animateSwap(el1, el2, r1, c1, r2, c2);
     busy = false;
     return;
   }
@@ -483,12 +488,11 @@ function swap(r1, c1, r2, c2) {
   [grid[r1][c1], grid[r2][c2]] = [grid[r2][c2], grid[r1][c1]];
 }
 
-async function animateSwap(r1, c1, r2, c2) {
-  const el1 = getGemEl(r1, c1);
-  const el2 = getGemEl(r2, c2);
+async function animateSwap(el1, el2, r1, c1, r2, c2) {
   const off = (CELL - GEM_SIZE) / 2;
-  if (el1) { el1.style.left = c1 * (CELL+GAP) + off + 'px'; el1.style.top = r1 * (CELL+GAP) + off + 'px'; el1.dataset.r = r1; el1.dataset.c = c1; }
-  if (el2) { el2.style.left = c2 * (CELL+GAP) + off + 'px'; el2.style.top = r2 * (CELL+GAP) + off + 'px'; el2.dataset.r = r2; el2.dataset.c = c2; }
+  // el1 从 (r1,c1) 移到 (r2,c2)，el2 从 (r2,c2) 移到 (r1,c1)
+  if (el1) { el1.style.left = c2 * (CELL+GAP) + off + 'px'; el1.style.top = r2 * (CELL+GAP) + off + 'px'; el1.dataset.r = r2; el1.dataset.c = c2; }
+  if (el2) { el2.style.left = c1 * (CELL+GAP) + off + 'px'; el2.style.top = r1 * (CELL+GAP) + off + 'px'; el2.dataset.r = r1; el2.dataset.c = c1; }
   await sleep(260);
 }
 
@@ -655,6 +659,23 @@ function checkLevelResult() {
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 loadLevel(0);
+
+/* 手机端自适应缩放 */
+(function() {
+  function resizeBoard() {
+    var boardW = COLS * (CELL + GAP) + 20; // +20 for padding
+    var maxW = window.innerWidth - 16;
+    var scale = Math.min(1, maxW / boardW);
+    var wrap = document.querySelector('.board-wrap');
+    if (wrap) {
+      wrap.style.transform = 'scale(' + scale + ')';
+      wrap.style.marginBottom = (scale < 1 ? -(1 - scale) * wrap.offsetHeight + 'px' : '0');
+    }
+  }
+  resizeBoard();
+  window.addEventListener('resize', resizeBoard);
+  window.addEventListener('orientationchange', function() { setTimeout(resizeBoard, 200); });
+})();
 
 /* 首次点击页面后启动背景音乐 */
 document.addEventListener('click', function _bgm() {
