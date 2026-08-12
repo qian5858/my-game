@@ -7,12 +7,12 @@
 <title>切水果</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:#0a0a1a;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden}
+body{background:#0a0a1a;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow-x:hidden;overflow-y:auto;padding:10px 8px 20px}
 .header{display:flex;gap:12px;margin-bottom:6px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
 .header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
 .header .val{font-weight:bold;color:#feca57;min-width:28px;text-align:center}
-.canvas-wrap{border:2px solid #2a2a4a;border-radius:10px;overflow:hidden;box-shadow:0 0 30px rgba(255,107,107,.08);position:relative}
-canvas{display:block;cursor:none}
+.canvas-wrap{border:2px solid #2a2a4a;border-radius:10px;overflow:hidden;box-shadow:0 0 30px rgba(255,107,107,.08);position:relative;max-width:100%;width:500px}
+canvas{display:block;max-width:100%;height:auto;touch-action:none}
 .overlay{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:10}
 .overlay h2{font-size:1.6rem;margin-bottom:8px;color:#feca57}
 .overlay p{color:#aab;margin-bottom:12px}
@@ -31,11 +31,11 @@ canvas{display:block;cursor:none}
   <canvas id="cv" width="500" height="450"></canvas>
   <div class="overlay" id="overlay">
     <h2 id="ov-title">🍉 切水果</h2>
-    <p id="ov-msg">划动鼠标切开水果，避开炸弹！</p>
+    <p id="ov-msg">手指滑动切开水果，避开炸弹！</p>
     <button class="btn" onclick="startGame()">开始切！</button>
   </div>
 </div>
-<div class="tip">按住鼠标拖动切割 · 切到炸弹扣命 · 连切加分</div>
+<div class="tip">按住手指拖动切割 · 切到炸弹扣命 · 连切加分</div>
 
 <script>
 const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
@@ -296,13 +296,13 @@ function gameLoop(){
 }
 
 // Input
-cv.addEventListener('mousedown',e=>{mouseDown=true;const r=cv.getBoundingClientRect();mouseX=e.clientX-r.left;mouseY=e.clientY-r.top;prevMX=mouseX;prevMY=mouseY;});
-cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();prevMX=mouseX;prevMY=mouseY;mouseX=e.clientX-r.left;mouseY=e.clientY-r.top;});
+cv.addEventListener('mousedown',e=>{mouseDown=true;const r=cv.getBoundingClientRect();mouseX=(e.clientX-r.left)*(W/r.width);mouseY=(e.clientY-r.top)*(H/r.height);prevMX=mouseX;prevMY=mouseY;});
+cv.addEventListener('mousemove',e=>{const r=cv.getBoundingClientRect();prevMX=mouseX;prevMY=mouseY;mouseX=(e.clientX-r.left)*(W/r.width);mouseY=(e.clientY-r.top)*(H/r.height);});
 cv.addEventListener('mouseup',()=>mouseDown=false);
 cv.addEventListener('mouseleave',()=>mouseDown=false);
 
-cv.addEventListener('touchstart',e=>{e.preventDefault();mouseDown=true;const r=cv.getBoundingClientRect();mouseX=e.touches[0].clientX-r.left;mouseY=e.touches[0].clientY-r.top;prevMX=mouseX;prevMY=mouseY;},{passive:false});
-cv.addEventListener('touchmove',e=>{e.preventDefault();const r=cv.getBoundingClientRect();prevMX=mouseX;prevMY=mouseY;mouseX=e.touches[0].clientX-r.left;mouseY=e.touches[0].clientY-r.top;},{passive:false});
+cv.addEventListener('touchstart',e=>{e.preventDefault();mouseDown=true;const r=cv.getBoundingClientRect();mouseX=(e.touches[0].clientX-r.left)*(W/r.width);mouseY=(e.touches[0].clientY-r.top)*(H/r.height);prevMX=mouseX;prevMY=mouseY;},{passive:false});
+cv.addEventListener('touchmove',e=>{e.preventDefault();const r=cv.getBoundingClientRect();prevMX=mouseX;prevMY=mouseY;mouseX=(e.touches[0].clientX-r.left)*(W/r.width);mouseY=(e.touches[0].clientY-r.top)*(H/r.height);},{passive:false});
 cv.addEventListener('touchend',e=>{e.preventDefault();mouseDown=false;},{passive:false});
 
 gameRunning=false;gameOver=true;
