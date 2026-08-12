@@ -7,12 +7,12 @@
 <title>贪吃蛇大作战</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:linear-gradient(180deg,#0a0a1a,#1a1a2e);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow:hidden}
+body{background:linear-gradient(180deg,#0a0a1a,#1a1a2e);min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font-family:'Segoe UI',sans-serif;color:#e0e0e0;user-select:none;overflow-x:hidden;overflow-y:auto;padding:10px 8px 20px}
 .header{display:flex;gap:12px;margin-bottom:6px;font-size:.9rem;flex-wrap:wrap;justify-content:center}
 .header .item{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.06);padding:5px 14px;border-radius:20px}
 .header .val{font-weight:bold;color:#feca57;min-width:24px;text-align:center}
-.canvas-wrap{border:2px solid #2a2a4a;border-radius:10px;overflow:hidden;box-shadow:0 0 30px rgba(72,219,251,.08);position:relative}
-canvas{display:block}
+.canvas-wrap{border:2px solid #2a2a4a;border-radius:10px;overflow:hidden;box-shadow:0 0 30px rgba(72,219,251,.08);position:relative;max-width:100%;width:400px}
+canvas{display:block;width:100%;height:auto;touch-action:none}
 .toolbar{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap;justify-content:center}
 .mode-btn,.skin-btn{padding:6px 14px;border:1px solid rgba(255,255,255,.15);border-radius:8px;background:rgba(255,255,255,.05);color:#aab;cursor:pointer;font-size:.8rem;transition:all .2s;font-family:inherit}
 .mode-btn:hover,.skin-btn:hover{background:rgba(255,255,255,.12)}
@@ -69,7 +69,7 @@ const SKINS=[
 let snake,dir,nextDir,food,powerups,score,best,gameOver,paused,mode,skin;
 let walls=[],portals=[];
 let shield=false,speedBoost=0,magnet=0;
-let baseInterval=120,interval,timer;
+let baseInterval=180,interval,timer;
 best=parseInt(localStorage.getItem('snake_best')||'0');
 document.getElementById('best').textContent=best;
 
@@ -94,7 +94,7 @@ function updateSpeed(){
   if(mode==='speed')spd=2+Math.floor(score/5);
   else spd=1+Math.floor(score/10);
   document.getElementById('speed').textContent=spd;
-  interval=Math.max(50,baseInterval-spd*8-(speedBoost>0?30:0));
+  interval=Math.max(80,baseInterval-spd*6-(speedBoost>0?30:0));
   if(timer){clearInterval(timer);timer=setInterval(tick,interval);}
 }
 
@@ -238,7 +238,7 @@ function setMode(m,el){
   document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
   document.getElementById('mode-name').textContent=el.textContent.replace(/^[^\s]+\s/,'');
-  baseInterval=m==='speed'?80:120;
+  baseInterval=m==='speed'?120:180;
   init();
 }
 
