@@ -492,10 +492,10 @@ async function trySwap(r1, c1, r2, c2) {
 
   const matches = findMatches();
   if (matches.length === 0) {
-    // 无匹配 → 换回
+    // 无匹配 → 数据换回 + 动画还原（从交换后的位置移回原位置）
     sfxBadSwap();
     swap(r1, c1, r2, c2);
-    await animateSwap(el1, el2, r1, c1, r2, c2);
+    await animateSwap(el1, el2, r2, c2, r1, c1);
     busy = false;
     return;
   }
