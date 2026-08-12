@@ -52,7 +52,7 @@ const FRUITS=[
   {emoji:'🥝',name:'猕猴桃',color:'#27ae60',juice:'#2ecc71',points:2,r:22},
 ];
 
-let fruits,bombs,slashes,juiceParticles,score,best,combo,comboTimer,lives,gameRunning,gameOver;
+let fruits=[],bombs=[],slashes=[],juiceParticles=[],score=0,best,combo=0,comboTimer=0,lives=3,gameRunning=false,gameOver=true;
 let mouseDown=false,mouseX=0,mouseY=0,prevMX=0,prevMY=0;
 let spawnTimer,frame;
 

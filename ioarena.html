@@ -44,7 +44,7 @@ const W=600,H=500;
 const WORLD_W=2000,WORLD_H=2000;
 const NAMES=['小明','大白','球王','吞噬者','小可爱','巨无霸','风暴','闪电','泡泡','圆圆','胖胖','飞飞','强强','萌萌','豆豆'];
 
-let player,bots,foods,particles,camera,kills,bestMass,gameRunning,gameOver;
+let player=null,bots=[],foods=[],particles=[],camera={x:0,y:0},kills=0,bestMass=0,gameRunning=false,gameOver=true;
 let mouseX=W/2,mouseY=H/2;
 bestMass=parseInt(localStorage.getItem('io_best')||'0');
 document.getElementById('best').textContent=bestMass;
@@ -290,7 +290,7 @@ function draw(){
   bots.forEach(b=>{if(b.alive)drawCircle(b.x,b.y,b.r,b.color,b.name,b.mass);});
 
   // Player
-  if(player.alive)drawCircle(player.x,player.y,player.r,player.color,player.name,player.mass);
+  if(player&&player.alive)drawCircle(player.x,player.y,player.r,player.color,player.name,player.mass);
 
   // Cursor
   const cx=mouseX,cy=mouseY;
@@ -299,6 +299,7 @@ function draw(){
   ctx.beginPath();ctx.moveTo(cx,cy-8);ctx.lineTo(cx,cy+8);ctx.stroke();
 
   // Leaderboard
+  if(player){
   const all=[player,...bots.filter(b=>b.alive)].sort((a,b)=>b.mass-a.mass);
   const rank=all.indexOf(player)+1;
   document.getElementById('mass').textContent=Math.floor(player.mass);
@@ -312,6 +313,7 @@ function draw(){
     ctx.fillStyle=e===player?'#48dbfb':'rgba(255,255,255,.4)';
     ctx.fillText(`${i+1}. ${e.name} (${Math.floor(e.mass)})`,W-110,32+i*16);
   });
+  }
 }
 
 function gameLoop(){

@@ -61,7 +61,7 @@ const FISH_TYPES=[
   {emoji:'👑',name:'金鱼王',color:'#f1c40f',minSize:15,maxSize:25,speed:1,depth:[280,370],rarity:5,value:200},
 ];
 
-let fishes,hook,state,coins,caughtTypes,biggest,lv,castTimer,waitTimer,catchAnim;
+let fishes=[],hook={x:250,y:120-30,vy:0,targetY:0},state='idle',coins=0,caughtTypes=new Set(),biggest=0,lv=1,castTimer=0,waitTimer=0,catchAnim=null;
 let frame=0;
 
 document.getElementById('total').textContent=FISH_TYPES.length;

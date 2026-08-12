@@ -237,7 +237,7 @@ function buildLevel(lv) {
     enemies: data.enemies.map(([x,y]) => ({ x: x*TILE, y: y*TILE, w: TILE, h: TILE, vx: -1.5, alive: true, squishT: 0 })),
     coins: data.coins.map(([x,y]) => ({ x: x*TILE+8, y: y*TILE+8, w: 16, h: 16, collected: false, animT: Math.random()*Math.PI*2 })),
     flagX: data.flagX * TILE,
-    playerStart: { x: 2 * TILE, y: 9 * TILE },
+    playerStart: { x: 5 * TILE, y: 9 * TILE },
   };
 }
 
