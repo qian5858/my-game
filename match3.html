@@ -507,6 +507,11 @@ async function trySwap(r1, c1, r2, c2) {
   await resolveMatches();
   busy = false;
 
+  // 达到目标分数 → 立即过关
+  if (score >= LEVELS[currentLevel].target) {
+    checkLevelResult();
+    return;
+  }
   if (moves <= 0) checkLevelResult();
 }
 
